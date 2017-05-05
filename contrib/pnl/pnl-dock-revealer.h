@@ -23,11 +23,14 @@
 #ifndef PNL_DOCK_REVEALER_H
 #define PNL_DOCK_REVEALER_H
 
-#include "pnl-dock-types.h"
+#include "pnl-bin.h"
 
 G_BEGIN_DECLS
 
 #define PNL_TYPE_DOCK_REVEALER_TRANSITION_TYPE (pnl_dock_revealer_transition_type_get_type())
+#define PNL_TYPE_DOCK_REVEALER                 (pnl_dock_revealer_get_type())
+
+G_DECLARE_DERIVABLE_TYPE (PnlDockRevealer, pnl_dock_revealer, PNL, DOCK_REVEALER, PnlBin)
 
 typedef enum
 {
@@ -40,16 +43,16 @@ typedef enum
 
 struct _PnlDockRevealerClass
 {
-  GtkBinClass parent;
+  PnlBinClass parent;
 
-  void (*padding1) (void);
-  void (*padding2) (void);
-  void (*padding3) (void);
-  void (*padding4) (void);
-  void (*padding5) (void);
-  void (*padding6) (void);
-  void (*padding7) (void);
-  void (*padding8) (void);
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
+  gpointer _reserved5;
+  gpointer _reserved6;
+  gpointer _reserved7;
+  gpointer _reserved8;
 };
 
 GType                          pnl_dock_revealer_transition_type_get_type (void);

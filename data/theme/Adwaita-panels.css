@@ -1,50 +1,80 @@
-dockbin {
-  border: 1px solid alpha(@borders, 0.75);
-  -PnlDockBin-handle-size: 1;
+pnldockbinedge {
+  background-color: @content_view_bg;
+  border-color: @borders;
+  border-style: solid;
 }
 
-dockpaned {
+pnldockbinedge.right {
+  border-left-width: 1px;
+}
+
+pnldockbinedge.left {
+  border-right-width: 1px;
+}
+
+pnldockbinedge.bottom {
+  border-top-width: 1px;
+}
+
+pnldockpaned .handle {
   border: 1px solid @borders;
 }
 
-docktabstrip {
-  padding: 0 6px 0 6px;
-}
-
-docktab {
-  background-image: none;
-  background-color: transparent;
-  border-color: transparent;
-  border-style: solid;
+pnldockstack pnltabstrip {
+  padding-top: 2px;
+  background-color: @content_view_bg;
   color: @theme_fg_color;
-  min-height: 39px;
-  outline-offset: -6px;
-  transition-duration: 200ms;
-  transition-timing-function: ease;
+  border-bottom: 1px solid mix(@theme_bg_color, @borders, 0.25);
 }
 
-docktab > label {
-  font-size: 0.9em;
-}
-
-docktab > * {
-  padding: 0 6px 0 6px;
-}
-
-dockoverlayedge {
-  background-color: @theme_bg_color;
-}
-
-dockoverlayedge docktabstrip {
-  padding: 0;
+pnldockstack pnltabstrip button.control,
+pnldockstack pnltabstrip pnltab {
+  background: transparent;
+  box-shadow: none;
   border: none;
+  padding: 0;
+  margin: 0;
+
+  border-bottom: 3px;
+  border-bottom-style: solid;
+  border-bottom-color: transparent;
+
+  margin-left: 6px;
+  margin-right: 6px;
+
+  color: @theme_fg_color;
 }
 
-dockoverlayedge.left-edge docktab:checked {
-  border-right-color: @theme_selected_bg_color;
-  border-bottom-color: transparent;
+pnldockstack pnltabstrip button.control,
+pnldockstack pnltabstrip pnltab button,
+pnldockstack pnltabstrip pnltab {
+  transition-duration: 200ms;
 }
-dockoverlayedge.right-edge docktab:checked {
-  border-left-color: @theme_selected_bg_color;
-  border-bottom-color: transparent;
+
+pnldockstack pnltabstrip pnltab button {
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+
+pnldockstack pnltabstrip pnltab:active {
+  border-bottom-color: @theme_selected_bg_color;
+}
+
+pnldockstack pnltabstrip button.control:last-child {
+  margin-right: 16px;
+}
+
+pnldockstack pnltabstrip button.control:hover,
+pnldockstack pnltabstrip pnltab:hover {
+  border-bottom-color: mix(@borders, @theme_bg_color, 0.25);
+}
+
+pnldockstack pnltabstrip button.control:hover:checked,
+pnldockstack pnltabstrip button.control:checked,
+pnldockstack pnltabstrip pnltab:hover:checked,
+pnldockstack pnltabstrip pnltab:checked {
+  border-bottom-color: @theme_selected_bg_color;
 }

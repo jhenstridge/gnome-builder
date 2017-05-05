@@ -8,7 +8,7 @@ pkglib_LTLIBRARIES = libpanel-gtk.la
 
 headersdir = $(includedir)/gnome-builder-@VERSION@/pnl
 headers_DATA =                      \
-	pnl-animation.h             \
+	pnl-bin.h                   \
 	pnl-dock-bin.h              \
 	pnl-dock-bin-edge.h         \
 	pnl-dock-item.h             \
@@ -22,7 +22,6 @@ headers_DATA =                      \
 	pnl-dock-widget.h           \
 	pnl-dock-window.h           \
 	pnl-dock.h                  \
-	pnl-frame-source.h          \
 	pnl-multi-paned.h           \
 	pnl-tab-strip.h             \
 	pnl-tab.h                   \
@@ -30,31 +29,39 @@ headers_DATA =                      \
 	pnl.h                       \
 	$(NULL)
 
-libpanel_gtk_la_SOURCES =           \
-	$(headers_DATA)             \
-	pnl-animation.c             \
+public_sources =                    \
+	pnl-bin.c                   \
 	pnl-dock-bin-edge.c         \
-	pnl-dock-bin-edge-private.h \
 	pnl-dock-bin.c              \
 	pnl-dock-item.c             \
 	pnl-dock-manager.c          \
-	pnl-dock-overlay-edge.c     \
 	pnl-dock-overlay.c          \
-	pnl-dock-paned-private.h    \
+	pnl-dock-overlay-edge.c     \
 	pnl-dock-paned.c            \
 	pnl-dock-revealer.c         \
 	pnl-dock-stack.c            \
-	pnl-dock-tab-strip.c        \
-	pnl-dock-tab-strip.h        \
-	pnl-dock-transient-grab.c   \
-	pnl-dock-transient-grab.h   \
 	pnl-dock-widget.c           \
 	pnl-dock-window.c           \
 	pnl-dock.c                  \
-	pnl-frame-source.c          \
 	pnl-multi-paned.c           \
 	pnl-tab-strip.c             \
 	pnl-tab.c                   \
+	$(NULL)
+
+libpanel_gtk_la_SOURCES =           \
+	$(headers_DATA)             \
+	$(public_sources)           \
+	pnl-animation.c             \
+	pnl-animation.h             \
+	pnl-child-property-action.c \
+	pnl-child-property-action.h \
+	pnl-dock-bin-edge-private.h \
+	pnl-dock-paned-private.h    \
+	pnl-dock-transient-grab.c   \
+	pnl-dock-transient-grab.h   \
+	pnl-frame-source.c          \
+	pnl-frame-source.h          \
+	pnl-tab-private.h           \
 	pnl-util-private.h          \
 	pnl-util.c                  \
 	$(NULL)
@@ -93,7 +100,10 @@ Pnl-1.0.gir: libpanel-gtk.la
 Pnl_1_0_gir_INCLUDES = Gio-2.0 Gdk-3.0 Gtk-3.0
 Pnl_1_0_gir_CFLAGS = $(libpanel_gtk_la_CFLAGS) -DPNL_COMPILATION
 Pnl_1_0_gir_LIBS = libpanel-gtk.la
-Pnl_1_0_gir_FILES = $(libpanel_gtk_la_SOURCES)
+Pnl_1_0_gir_FILES =                 \
+	$(public_sources)           \
+	$(headers_DATA)             \
+	$(NULL)
 Pnl_1_0_gir_SCANNERFLAGS =          \
 	--c-include="pnl.h"         \
 	-n Pnl                      \

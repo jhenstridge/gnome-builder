@@ -18,12 +18,13 @@
 
 #include <stdlib.h>
 
+#include "pnl-child-property-action.h"
 #include "pnl-dock-bin.h"
 #include "pnl-dock-bin-edge-private.h"
 #include "pnl-dock-item.h"
 
-#define HANDLE_WIDTH  10
-#define HANDLE_HEIGHT 10
+#define HANDLE_WIDTH  3
+#define HANDLE_HEIGHT 3
 
 typedef enum
 {
@@ -83,6 +84,13 @@ typedef struct
    * the last child, and our sort function ensures that.
    */
   PnlDockBinChildType type : 3;
+
+  /*
+   * If the panel is pinned, this will be set to TRUE. A pinned panel
+   * means that it is displayed juxtapose the center child, where as
+   * an unpinned child is floating above teh center child.
+   */
+  guint pinned : 1;
 } PnlDockBinChild;
 
 typedef struct
@@ -122,34 +130,184 @@ static void pnl_dock_bin_init_dock_item_iface (PnlDockItemInterface *iface);
 
 G_DEFINE_TYPE_EXTENDED (PnlDockBin, pnl_dock_bin, GTK_TYPE_CONTAINER, 0,
                         G_ADD_PRIVATE (PnlDockBin)
-                        G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE,
-                                               pnl_dock_bin_init_buildable_iface)
-                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM,
-                                               pnl_dock_bin_init_dock_item_iface)
-                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK,
-                                               pnl_dock_bin_init_dock_iface))
+                        G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE, pnl_dock_bin_init_buildable_iface)
+                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM, pnl_dock_bin_init_dock_item_iface)
+                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK, pnl_dock_bin_init_dock_iface))
 
 enum {
   PROP_0,
+  PROP_LEFT_VISIBLE,
+  PROP_RIGHT_VISIBLE,
+  PROP_TOP_VISIBLE,
+  PROP_BOTTOM_VISIBLE,
+  N_PROPS,
+
   PROP_MANAGER,
-  N_PROPS
 };
 
 enum {
   CHILD_PROP_0,
+  CHILD_PROP_PINNED,
   CHILD_PROP_POSITION,
   CHILD_PROP_PRIORITY,
   N_CHILD_PROPS
 };
 
-enum {
-  STYLE_PROP_0,
-  STYLE_PROP_HANDLE_SIZE,
-  N_STYLE_PROPS
-};
-
+static GParamSpec *properties [N_PROPS];
 static GParamSpec *child_properties [N_CHILD_PROPS];
-static GParamSpec *style_properties [N_STYLE_PROPS];
+
+static gint
+pnl_dock_bin_child_compare (gconstpointer a,
+                            gconstpointer b)
+{
+  const PnlDockBinChild *child_a = a;
+  const PnlDockBinChild *child_b = b;
+
+  if (child_a->type == PNL_DOCK_BIN_CHILD_CENTER)
+    return 1;
+  else if (child_b->type == PNL_DOCK_BIN_CHILD_CENTER)
+    return -1;
+
+  if ((child_a->pinned ^ child_b->pinned) != 0)
+    return child_a->pinned - child_b->pinned;
+
+  return child_a->priority - child_b->priority;
+}
+
+static void
+pnl_dock_bin_resort_children (PnlDockBin *self)
+{
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+
+  /*
+   * Sort the children by priority/pinned status, but do not change
+   * the position of the PNL_DOCK_BIN_CHILD_CENTER child. It should
+   * always be at the last position.
+   */
+
+  g_qsort_with_data (&priv->children[0],
+                     PNL_DOCK_BIN_CHILD_CENTER,
+                     sizeof (PnlDockBinChild),
+                     (GCompareDataFunc)pnl_dock_bin_child_compare,
+                     NULL);
+
+  gtk_widget_queue_allocate (GTK_WIDGET (self));
+}
+
+static GAction *
+pnl_dock_bin_get_visible_action_for_type (PnlDockBin          *self,
+                                          PnlDockBinChildType  type)
+{
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  const gchar *name = NULL;
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+
+  switch (type)
+    {
+    case PNL_DOCK_BIN_CHILD_LEFT:
+      name = "left-visible";
+      break;
+
+    case PNL_DOCK_BIN_CHILD_RIGHT:
+      name = "right-visible";
+      break;
+
+    case PNL_DOCK_BIN_CHILD_TOP:
+      name = "top-visible";
+      break;
+
+    case PNL_DOCK_BIN_CHILD_BOTTOM:
+      name = "bottom-visible";
+      break;
+
+    case PNL_DOCK_BIN_CHILD_CENTER:
+    case LAST_PNL_DOCK_BIN_CHILD:
+    default:
+      g_assert_not_reached ();
+    }
+
+  return g_action_map_lookup_action (G_ACTION_MAP (priv->actions), name);
+}
+
+static gboolean
+get_visible (PnlDockBin  *self,
+             const gchar *action_name)
+{
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  GAction *action;
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+  g_assert (action_name != NULL);
+
+  action = g_action_map_lookup_action (G_ACTION_MAP (priv->actions), action_name);
+
+  if (action != NULL)
+    {
+      GVariant *v = g_action_get_state (action);
+      gboolean ret = v ? g_variant_get_boolean (v) : FALSE;
+
+      g_clear_pointer (&v, g_variant_unref);
+
+      return ret;
+    }
+
+  return FALSE;
+}
+
+static gboolean
+set_visible (PnlDockBin  *self,
+             const gchar *action_name,
+             gboolean     value)
+{
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  GAction *action;
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+  g_assert (action_name != NULL);
+
+  action = g_action_map_lookup_action (G_ACTION_MAP (priv->actions), action_name);
+
+  if (action != NULL)
+    g_simple_action_set_state (G_SIMPLE_ACTION (action), g_variant_new_boolean (value));
+
+  return FALSE;
+}
+
+static void
+pnl_dock_bin_update_actions (PnlDockBin *self)
+{
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  guint i;
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+
+  /*
+   * We need to walk each of the children edges looking for widgets
+   * that are visible. If so, we need to keep the edge action enabled.
+   * Otherwise disable it, so any buttons representing the action get
+   * properly desensitized.
+   */
+
+  for (i = 0; i < G_N_ELEMENTS (priv->children); i++)
+    {
+      PnlDockBinChild *child = &priv->children [i];
+      GAction *action;
+      gboolean enabled = FALSE;
+
+      if (child->type == PNL_DOCK_BIN_CHILD_CENTER)
+        continue;
+
+      action = pnl_dock_bin_get_visible_action_for_type (self, child->type);
+
+      if (child->widget != NULL)
+        enabled = pnl_dock_item_has_widgets (PNL_DOCK_ITEM (child->widget));
+
+      g_simple_action_set_enabled (G_SIMPLE_ACTION (action), enabled);
+    }
+}
 
 static gboolean
 map_boolean_to_variant (GBinding     *binding,
@@ -245,29 +403,6 @@ pnl_dock_bin_update_focus_chain (PnlDockBin *self)
     }
 }
 
-static GAction *
-pnl_dock_bin_get_action_for_type (PnlDockBin          *self,
-                                  PnlDockBinChildType  type)
-{
-  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
-  const gchar *name = NULL;
-
-  g_assert (PNL_IS_DOCK_BIN (self));
-
-  if (type == PNL_DOCK_BIN_CHILD_LEFT)
-    name = "left-visible";
-  else if (type == PNL_DOCK_BIN_CHILD_RIGHT)
-    name = "right-visible";
-  else if (type == PNL_DOCK_BIN_CHILD_TOP)
-    name = "top-visible";
-  else if (type == PNL_DOCK_BIN_CHILD_BOTTOM)
-    name = "bottom-visible";
-  else
-    g_assert_not_reached ();
-
-  return g_action_map_lookup_action (G_ACTION_MAP (priv->actions), name);
-}
-
 static void
 pnl_dock_bin_add (GtkContainer *container,
                   GtkWidget    *widget)
@@ -330,14 +465,33 @@ pnl_dock_bin_forall (GtkContainer *container,
 {
   PnlDockBin *self = (PnlDockBin *)container;
   PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  PnlDockBinChild *child;
   guint i;
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (callback != NULL);
 
-  for (i = G_N_ELEMENTS (priv->children); i > 0; i--)
+  /*
+   * Always call the "center" child callback first. This helps ensure that
+   * it is the first child to be rendered. We need that to ensure that panels
+   * are drawn *above* the center, even when floating. Note that the center
+   * child is always the last child in the array.
+   */
+  child = &priv->children [G_N_ELEMENTS (priv->children) - 1];
+  if (child->widget != NULL)
+    callback (child->widget, user_data);
+
+  /*
+   * Normally, we would iterate the array backwards so that we can ensure that
+   * the list is safe against widget destruction. However, since we have a
+   * fixed size array, we can walk forwards safely.  This helps ensure we
+   * preserve draw ordering for the various panels when we chain up to the
+   * container draw vfunc.
+   */
+
+  for (i = 0; i < G_N_ELEMENTS (priv->children) - 1; i++)
     {
-      PnlDockBinChild *child = &priv->children [i - 1];
+      child = &priv->children[i];
 
       if (child->widget != NULL)
         callback (GTK_WIDGET (child->widget), user_data);
@@ -357,7 +511,6 @@ pnl_dock_bin_get_children_preferred_width (PnlDockBin      *self,
   gint child_nat_width = 0;
   gint neighbor_min_width = 0;
   gint neighbor_nat_width = 0;
-  gint handle_size = 0;
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (children != NULL);
@@ -367,10 +520,6 @@ pnl_dock_bin_get_children_preferred_width (PnlDockBin      *self,
 
   *min_width = 0;
   *nat_width = 0;
-
-  gtk_widget_style_get (GTK_WIDGET (self),
-                        "handle-size", &handle_size,
-                        NULL);
 
   /*
    * We have a fairly simple rule for deducing the size request of
@@ -432,14 +581,22 @@ pnl_dock_bin_get_children_preferred_width (PnlDockBin      *self,
     {
     case PNL_DOCK_BIN_CHILD_LEFT:
     case PNL_DOCK_BIN_CHILD_RIGHT:
-      *min_width = (child_min_width + neighbor_min_width + handle_size);
-      *nat_width = (child_nat_width + neighbor_nat_width + handle_size);
+      if (child->pinned)
+        {
+          *min_width = (child_min_width + neighbor_min_width);
+          *nat_width = (child_nat_width + neighbor_nat_width);
+        }
+      else
+        {
+          *min_width = MAX (child_min_width, neighbor_min_width);
+          *nat_width = MAX (child_nat_width, neighbor_nat_width);
+        }
       break;
 
     case PNL_DOCK_BIN_CHILD_TOP:
     case PNL_DOCK_BIN_CHILD_BOTTOM:
-      *min_width = MAX (child_min_width, neighbor_min_width + handle_size);
-      *nat_width = MAX (child_nat_width, neighbor_nat_width + handle_size);
+      *min_width = MAX (child_min_width, neighbor_min_width);
+      *nat_width = MAX (child_nat_width, neighbor_nat_width);
       break;
 
     case PNL_DOCK_BIN_CHILD_CENTER:
@@ -488,7 +645,6 @@ pnl_dock_bin_get_children_preferred_height (PnlDockBin      *self,
   gint child_nat_height = 0;
   gint neighbor_min_height = 0;
   gint neighbor_nat_height = 0;
-  gint handle_size = 0;
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (children != NULL);
@@ -498,10 +654,6 @@ pnl_dock_bin_get_children_preferred_height (PnlDockBin      *self,
 
   *min_height = 0;
   *nat_height = 0;
-
-  gtk_widget_style_get (GTK_WIDGET (self),
-                        "handle-size", &handle_size,
-                        NULL);
 
   /*
    * See pnl_dock_bin_get_children_preferred_width() for more information on
@@ -527,14 +679,22 @@ pnl_dock_bin_get_children_preferred_height (PnlDockBin      *self,
     {
     case PNL_DOCK_BIN_CHILD_LEFT:
     case PNL_DOCK_BIN_CHILD_RIGHT:
-      *min_height = MAX (child_min_height, neighbor_min_height + handle_size);
-      *nat_height = MAX (child_nat_height, neighbor_nat_height + handle_size);
+      *min_height = MAX (child_min_height, neighbor_min_height);
+      *nat_height = MAX (child_nat_height, neighbor_nat_height);
       break;
 
     case PNL_DOCK_BIN_CHILD_TOP:
     case PNL_DOCK_BIN_CHILD_BOTTOM:
-      *min_height = (child_min_height + neighbor_min_height + handle_size);
-      *nat_height = (child_nat_height + neighbor_nat_height + handle_size);
+      if (child->pinned)
+        {
+          *min_height = (child_min_height + neighbor_min_height);
+          *nat_height = (child_nat_height + neighbor_nat_height);
+        }
+      else
+        {
+          *min_height = MAX (child_min_height, neighbor_min_height);
+          *nat_height = MAX (child_nat_height, neighbor_nat_height);
+        }
       break;
 
     case PNL_DOCK_BIN_CHILD_CENTER:
@@ -605,7 +765,6 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
                                   GtkAllocation   *allocation)
 {
   PnlDockBinChild *child = children;
-  gint handle_size = 0;
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (children != NULL);
@@ -622,10 +781,6 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
       return;
     }
 
-  gtk_widget_style_get (GTK_WIDGET (self),
-                        "handle-size", &handle_size,
-                        NULL);
-
   if (child->widget != NULL &&
       gtk_widget_get_visible (child->widget) &&
       gtk_widget_get_child_visible (child->widget))
@@ -634,6 +789,11 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
       GtkAllocation handle_alloc = { 0 };
       GtkRequisition neighbor_min = { 0 };
       GtkRequisition neighbor_nat = { 0 };
+      GtkStyleContext *style_context = gtk_widget_get_style_context (child->widget);
+      GtkStateType state = gtk_style_context_get_state (style_context);
+      GtkBorder margin;
+
+      gtk_style_context_get_margin (style_context, state, &margin);
 
       pnl_dock_bin_get_children_preferred_height (self, child, 1,
                                                   &child->min_req.height,
@@ -643,17 +803,20 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
                                                  &child->min_req.width,
                                                  &child->nat_req.width);
 
-      pnl_dock_bin_get_children_preferred_height (self,
-                                                  &children [1],
-                                                  n_children - 1,
-                                                  &neighbor_min.height,
-                                                  &neighbor_nat.height);
+      if (child->pinned)
+        {
+          pnl_dock_bin_get_children_preferred_height (self,
+                                                      &children [1],
+                                                      n_children - 1,
+                                                      &neighbor_min.height,
+                                                      &neighbor_nat.height);
 
-      pnl_dock_bin_get_children_preferred_width (self,
-                                                 &children [1],
-                                                 n_children - 1,
-                                                 &neighbor_min.width,
-                                                 &neighbor_nat.width);
+          pnl_dock_bin_get_children_preferred_width (self,
+                                                     &children [1],
+                                                     n_children - 1,
+                                                     &neighbor_min.width,
+                                                     &neighbor_nat.width);
+        }
 
       pnl_dock_bin_negotiate_size (self,
                                    allocation,
@@ -669,35 +832,51 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
           child_alloc.x = allocation->x;
           child_alloc.y = allocation->y;
           child_alloc.height = allocation->height;
-          child_alloc.width -= handle_size;
-          allocation->x += child_alloc.width + handle_size;
-          allocation->width -= child_alloc.width + handle_size;
+
+          if (child->pinned)
+            {
+              allocation->x += child_alloc.width;
+              allocation->width -= child_alloc.width;
+            }
+
           break;
 
+
         case PNL_DOCK_BIN_CHILD_RIGHT:
-          child_alloc.width -= handle_size;
           child_alloc.x = allocation->x + allocation->width - child_alloc.width;
           child_alloc.y = allocation->y;
           child_alloc.height = allocation->height;
-          allocation->width -= child_alloc.width + handle_size;
+
+          if (child->pinned)
+            allocation->width -= child_alloc.width;
+
           break;
+
 
         case PNL_DOCK_BIN_CHILD_TOP:
           child_alloc.x = allocation->x;
           child_alloc.y = allocation->y;
           child_alloc.width = allocation->width;
-          child_alloc.height -= handle_size;
-          allocation->y += child_alloc.height + handle_size;
-          allocation->height -= child_alloc.height + handle_size;
+
+          if (child->pinned)
+            {
+              allocation->y += child_alloc.height;
+              allocation->height -= child_alloc.height;
+            }
+
           break;
 
+
         case PNL_DOCK_BIN_CHILD_BOTTOM:
-          child_alloc.height -= handle_size;
           child_alloc.x = allocation->x;
           child_alloc.y = allocation->y + allocation->height - child_alloc.height;
           child_alloc.width = allocation->width;
-          allocation->height -= child_alloc.height + handle_size;
+
+          if (child->pinned)
+            allocation->height -= child_alloc.height;
+
           break;
+
 
         case PNL_DOCK_BIN_CHILD_CENTER:
         case LAST_PNL_DOCK_BIN_CHILD:
@@ -711,6 +890,7 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
       switch (child->type)
         {
         case PNL_DOCK_BIN_CHILD_LEFT:
+
           /*
            * When left-to-right, we often have a scrollbar to deal
            * with right here. So fudge the allocation position a bit
@@ -727,20 +907,29 @@ pnl_dock_bin_child_size_allocate (PnlDockBin      *self,
               handle_alloc.x += handle_alloc.width - HANDLE_WIDTH;
               handle_alloc.width = HANDLE_WIDTH;
             }
+
+          handle_alloc.x -= margin.right;
+
           break;
 
         case PNL_DOCK_BIN_CHILD_RIGHT:
           handle_alloc.width = HANDLE_WIDTH;
+
           if (gtk_widget_get_direction (child->widget) == GTK_TEXT_DIR_RTL)
             handle_alloc.x -= (HANDLE_WIDTH / 2);
+
+          handle_alloc.x += margin.left;
+
           break;
 
         case PNL_DOCK_BIN_CHILD_BOTTOM:
           handle_alloc.height = HANDLE_HEIGHT;
+          handle_alloc.y += margin.top;
           break;
 
         case PNL_DOCK_BIN_CHILD_TOP:
           handle_alloc.y += handle_alloc.height - HANDLE_HEIGHT;
+          handle_alloc.y -= margin.bottom;
           handle_alloc.height = HANDLE_HEIGHT;
           break;
 
@@ -799,15 +988,20 @@ pnl_dock_bin_size_allocate (GtkWidget     *widget,
    * because the child has an empty allocation.
    */
 
-  for (i = 0; i < PNL_DOCK_BIN_CHILD_CENTER; i++)
+  for (i = PNL_DOCK_BIN_CHILD_CENTER; i > 0; i--)
     {
-      PnlDockBinChild *child = &priv->children [i];
+      PnlDockBinChild *child = &priv->children [i - 1];
 
       if (child->handle != NULL)
         {
-          if (PNL_IS_DOCK_BIN_EDGE (child->widget) &&
-              pnl_dock_revealer_get_reveal_child (PNL_DOCK_REVEALER (child->widget)))
-            gdk_window_show (child->handle);
+          if (PNL_IS_DOCK_BIN_EDGE (child->widget))
+            {
+              if (gtk_widget_get_realized (child->widget))
+                gdk_window_raise (gtk_widget_get_window (child->widget));
+
+              if (pnl_dock_revealer_get_reveal_child (PNL_DOCK_REVEALER (child->widget)))
+                gdk_window_show (child->handle);
+            }
           else
             gdk_window_hide (child->handle);
         }
@@ -815,9 +1009,9 @@ pnl_dock_bin_size_allocate (GtkWidget     *widget,
 }
 
 static void
-pnl_dock_bin_visible_action (GSimpleAction *action,
-                             GVariant      *state,
-                             gpointer       user_data)
+pnl_dock_bin_visible_change_state (GSimpleAction *action,
+                                   GVariant      *state,
+                                   gpointer       user_data)
 {
   PnlDockBin *self = user_data;
   PnlDockBinChild *child;
@@ -849,19 +1043,38 @@ pnl_dock_bin_visible_action (GSimpleAction *action,
   pnl_dock_revealer_set_reveal_child (PNL_DOCK_REVEALER (child->widget), reveal_child);
 }
 
-static gint
-pnl_dock_bin_child_compare (gconstpointer a,
-                            gconstpointer b)
+static void
+pnl_dock_bin_set_child_pinned (PnlDockBin *self,
+                               GtkWidget  *widget,
+                               gboolean    pinned)
 {
-  const PnlDockBinChild *child_a = a;
-  const PnlDockBinChild *child_b = b;
+  PnlDockBinChild *child;
+  GtkStyleContext *style_context;
 
-  if (child_a->type == PNL_DOCK_BIN_CHILD_CENTER)
-    return 1;
-  else if (child_b->type == PNL_DOCK_BIN_CHILD_CENTER)
-    return -1;
+  g_assert (PNL_IS_DOCK_BIN (self));
+  g_assert (GTK_IS_WIDGET (widget));
 
-  return child_a->priority - child_b->priority;
+  child = pnl_dock_bin_get_child (self, widget);
+
+  if (child->type == PNL_DOCK_BIN_CHILD_CENTER)
+    return;
+
+  child->pinned = !!pinned;
+
+  style_context = gtk_widget_get_style_context (widget);
+
+  if (child->pinned)
+    gtk_style_context_add_class (style_context, PNL_DOCK_BIN_STYLE_CLASS_PINNED);
+  else
+    gtk_style_context_remove_class (style_context, PNL_DOCK_BIN_STYLE_CLASS_PINNED);
+
+  pnl_dock_bin_resort_children (self);
+
+  gtk_widget_queue_resize (GTK_WIDGET (self));
+
+  if (child->widget != NULL)
+    gtk_container_child_notify_by_pspec (GTK_CONTAINER (self), child->widget,
+                                         child_properties [CHILD_PROP_PINNED]);
 }
 
 static void
@@ -870,7 +1083,6 @@ pnl_dock_bin_set_child_priority (PnlDockBin *self,
                                  gint        priority)
 {
   PnlDockBinChild *child;
-  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (GTK_IS_WIDGET (widget));
@@ -878,13 +1090,13 @@ pnl_dock_bin_set_child_priority (PnlDockBin *self,
   child = pnl_dock_bin_get_child (self, widget);
   child->priority = priority;
 
-  g_qsort_with_data (&priv->children[0],
-                     PNL_DOCK_BIN_CHILD_CENTER,
-                     sizeof (PnlDockBinChild),
-                     (GCompareDataFunc)pnl_dock_bin_child_compare,
-                     NULL);
+  pnl_dock_bin_resort_children (self);
 
   gtk_widget_queue_resize (GTK_WIDGET (self));
+
+  if (child->widget != NULL)
+    gtk_container_child_notify_by_pspec (GTK_CONTAINER (self), child->widget,
+                                         child_properties [CHILD_PROP_PRIORITY]);
 }
 
 static void
@@ -1335,7 +1547,12 @@ pnl_dock_bin_create_edge (PnlDockBin          *self,
                           PnlDockBinChild     *child,
                           PnlDockBinChildType  type)
 {
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+  g_autoptr(GSimpleActionGroup) map = NULL;
+  g_autoptr(GAction) pinned = NULL;
+  const gchar *name = NULL;
   GAction *action;
+  gboolean reveal_child = FALSE;
 
   g_assert (PNL_IS_DOCK_BIN (self));
   g_assert (child != NULL);
@@ -1358,101 +1575,73 @@ pnl_dock_bin_create_edge (PnlDockBin          *self,
       return;
     }
 
-  g_object_set (child->widget, "edge", (GtkPositionType)type, NULL);
+  /*
+   * If the user set the initial state for the edge before we created the
+   * edge, the value for it will be the state to the action. We need to
+   * grab that and apply it for our initial state.
+   */
+  switch (type)
+    {
+    case PNL_DOCK_BIN_CHILD_LEFT:   reveal_child = get_visible (self, "left-visible");   break;
+    case PNL_DOCK_BIN_CHILD_RIGHT:  reveal_child = get_visible (self, "right-visible");  break;
+    case PNL_DOCK_BIN_CHILD_TOP:    reveal_child = get_visible (self, "top-visible");    break;
+    case PNL_DOCK_BIN_CHILD_BOTTOM: reveal_child = get_visible (self, "bottom-visible"); break;
+    case PNL_DOCK_BIN_CHILD_CENTER:
+    case LAST_PNL_DOCK_BIN_CHILD:
+    default:
+      break;
+    }
+
+  g_object_set (child->widget,
+                "edge", (GtkPositionType)type,
+                "reveal-child", reveal_child,
+                NULL);
+
   gtk_widget_set_parent (g_object_ref_sink (child->widget), GTK_WIDGET (self));
 
-  action = pnl_dock_bin_get_action_for_type (self, type);
+  action = pnl_dock_bin_get_visible_action_for_type (self, type);
   g_object_bind_property_full (child->widget, "reveal-child",
                                action, "state",
                                G_BINDING_SYNC_CREATE,
                                map_boolean_to_variant,
                                NULL, NULL, NULL);
-}
 
-static gboolean
-pnl_dock_bin_draw (GtkWidget *widget,
-                   cairo_t   *cr)
-{
-  PnlDockBin *self = (PnlDockBin *)widget;
-  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
-  GtkStyleContext *style_context;
-  gboolean ret;
-  guint i;
-  gint handle_size = 0;
+  pnl_dock_item_adopt (PNL_DOCK_ITEM (self), PNL_DOCK_ITEM (child->widget));
 
-  g_assert (PNL_IS_DOCK_BIN (self));
-  g_assert (cr != NULL);
+  /* Action for panel children to easily activate */
+  map = g_simple_action_group_new ();
+  pinned = g_object_new (PNL_TYPE_CHILD_PROPERTY_ACTION,
+                         "enabled", TRUE,
+                         "container", self,
+                         "child", child->widget,
+                         "child-property-name", "pinned",
+                         "name", "pinned",
+                         NULL);
+  g_action_map_add_action (G_ACTION_MAP (map), pinned);
+  gtk_widget_insert_action_group (child->widget, "panel", G_ACTION_GROUP (map));
+  g_clear_object (&pinned);
 
-  ret = GTK_WIDGET_CLASS (pnl_dock_bin_parent_class)->draw (widget, cr);
+  /* Action for global widgetry to activate */
+  if (child->type == PNL_DOCK_BIN_CHILD_LEFT)
+    name = "left-pinned";
+  else if (child->type == PNL_DOCK_BIN_CHILD_RIGHT)
+    name = "right-pinned";
+  else if (child->type == PNL_DOCK_BIN_CHILD_TOP)
+    name = "top-pinned";
+  else if (child->type == PNL_DOCK_BIN_CHILD_BOTTOM)
+    name = "bottom-pinned";
+  pinned = g_object_new (PNL_TYPE_CHILD_PROPERTY_ACTION,
+                         "enabled", TRUE,
+                         "container", self,
+                         "child", child->widget,
+                         "child-property-name", "pinned",
+                         "name", name,
+                         NULL);
+  g_action_map_add_action (G_ACTION_MAP (priv->actions), pinned);
 
-  if (ret == GDK_EVENT_STOP)
-    return ret;
-
-  gtk_widget_style_get (widget,
-                        "handle-size", &handle_size,
-                        NULL);
-
-  if (handle_size == 0)
-    return ret;
-
-  style_context = gtk_widget_get_style_context (widget);
-
-  for (i = 0; i < PNL_DOCK_BIN_CHILD_CENTER; i++)
-    {
-      PnlDockBinChild *child = &priv->children [i];
-
-      if ((child->widget != NULL) &&
-          gtk_widget_get_visible (child->widget) &&
-          gtk_widget_get_child_visible (child->widget))
-        {
-          GtkAllocation handle;
-
-          gtk_widget_get_allocation (child->widget, &handle);
-
-          if (((child->type == PNL_DOCK_BIN_CHILD_LEFT) ||
-               (child->type == PNL_DOCK_BIN_CHILD_RIGHT)) &&
-              (handle.width <= handle_size))
-            continue;
-
-          if (((child->type == PNL_DOCK_BIN_CHILD_TOP) ||
-               (child->type == PNL_DOCK_BIN_CHILD_BOTTOM)) &&
-              (handle.height <= handle_size))
-            continue;
-
-          switch (child->type)
-            {
-            case PNL_DOCK_BIN_CHILD_LEFT:
-              handle.x += handle.width;
-              handle.width = handle_size;
-              break;
-
-            case PNL_DOCK_BIN_CHILD_RIGHT:
-              handle.x -= handle_size;
-              handle.width = handle_size;
-              break;
-
-            case PNL_DOCK_BIN_CHILD_TOP:
-              handle.y += handle.height;
-              handle.height = handle_size;
-              break;
-
-            case PNL_DOCK_BIN_CHILD_BOTTOM:
-              handle.y -= handle_size;
-              handle.height = handle_size;
-              break;
-
-            case PNL_DOCK_BIN_CHILD_CENTER:
-            case LAST_PNL_DOCK_BIN_CHILD:
-            default:
-              g_assert_not_reached ();
-              break;
-            }
-
-          gtk_render_handle (style_context, cr, handle.x, handle.y, handle.width, handle.height);
-        }
-    }
-
-  return ret;
+  if (child->pinned)
+    gtk_style_context_add_class (gtk_widget_get_style_context (child->widget),
+                                 PNL_DOCK_BIN_STYLE_CLASS_PINNED);
 }
 
 static void
@@ -1467,6 +1656,7 @@ pnl_dock_bin_init_child (PnlDockBin          *self,
 
   child->type = type;
   child->priority = (int)type * 100;
+  child->pinned = TRUE;
 }
 
 static void
@@ -1501,6 +1691,10 @@ pnl_dock_bin_get_child_property (GtkContainer *container,
       g_value_set_enum (value, (GtkPositionType)child->type);
       break;
 
+    case CHILD_PROP_PINNED:
+      g_value_set_boolean (value, child->pinned);
+      break;
+
     default:
       GTK_CONTAINER_WARN_INVALID_CHILD_PROPERTY_ID (container, prop_id, pspec);
     }
@@ -1517,6 +1711,10 @@ pnl_dock_bin_set_child_property (GtkContainer *container,
 
   switch (prop_id)
     {
+    case CHILD_PROP_PINNED:
+      pnl_dock_bin_set_child_pinned (self, widget, g_value_get_boolean (value));
+      break;
+
     case CHILD_PROP_PRIORITY:
       pnl_dock_bin_set_child_priority (self, widget, g_value_get_int (value));
       break;
@@ -1536,6 +1734,22 @@ pnl_dock_bin_get_property (GObject    *object,
 
   switch (prop_id)
     {
+    case PROP_LEFT_VISIBLE:
+      g_value_set_boolean (value, get_visible (self, "left-visible"));
+      break;
+
+    case PROP_RIGHT_VISIBLE:
+      g_value_set_boolean (value, get_visible (self, "right-visible"));
+      break;
+
+    case PROP_TOP_VISIBLE:
+      g_value_set_boolean (value, get_visible (self, "top-visible"));
+      break;
+
+    case PROP_BOTTOM_VISIBLE:
+      g_value_set_boolean (value, get_visible (self, "bottom-visible"));
+      break;
+
     case PROP_MANAGER:
       g_value_set_object (value, pnl_dock_item_get_manager (PNL_DOCK_ITEM (self)));
       break;
@@ -1555,6 +1769,22 @@ pnl_dock_bin_set_property (GObject      *object,
 
   switch (prop_id)
     {
+    case PROP_LEFT_VISIBLE:
+      set_visible (self, "left-visible", g_value_get_boolean (value));
+      break;
+
+    case PROP_RIGHT_VISIBLE:
+      set_visible (self, "right-visible", g_value_get_boolean (value));
+      break;
+
+    case PROP_TOP_VISIBLE:
+      set_visible (self, "top-visible", g_value_get_boolean (value));
+      break;
+
+    case PROP_BOTTOM_VISIBLE:
+      set_visible (self, "bottom-visible", g_value_get_boolean (value));
+      break;
+
     case PROP_MANAGER:
       pnl_dock_item_set_manager (PNL_DOCK_ITEM (self), g_value_get_object (value));
       break;
@@ -1574,7 +1804,6 @@ pnl_dock_bin_class_init (PnlDockBinClass *klass)
   object_class->get_property = pnl_dock_bin_get_property;
   object_class->set_property = pnl_dock_bin_set_property;
 
-  widget_class->draw = pnl_dock_bin_draw;
   widget_class->destroy = pnl_dock_bin_destroy;
   widget_class->drag_leave = pnl_dock_bin_drag_leave;
   widget_class->drag_motion = pnl_dock_bin_drag_motion;
@@ -1597,6 +1826,43 @@ pnl_dock_bin_class_init (PnlDockBinClass *klass)
 
   g_object_class_override_property (object_class, PROP_MANAGER, "manager");
 
+  properties [PROP_LEFT_VISIBLE] =
+    g_param_spec_boolean ("left-visible",
+                          "Left Visible",
+                          "If the left panel is visible.",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  properties [PROP_RIGHT_VISIBLE] =
+    g_param_spec_boolean ("right-visible",
+                          "Right Visible",
+                          "If the right panel is visible.",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  properties [PROP_TOP_VISIBLE] =
+    g_param_spec_boolean ("top-visible",
+                          "Top Visible",
+                          "If the top panel is visible.",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  properties [PROP_BOTTOM_VISIBLE] =
+    g_param_spec_boolean ("bottom-visible",
+                          "Bottom Visible",
+                          "If the bottom panel is visible.",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_properties (object_class, N_PROPS, properties);
+
+  child_properties [CHILD_PROP_PINNED] =
+    g_param_spec_boolean ("pinned",
+                          "Pinned",
+                          "If the child panel is pinned",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   child_properties [CHILD_PROP_POSITION] =
     g_param_spec_enum ("position",
                        "Position",
@@ -1616,17 +1882,7 @@ pnl_dock_bin_class_init (PnlDockBinClass *klass)
 
   gtk_container_class_install_child_properties (container_class, N_CHILD_PROPS, child_properties);
 
-  style_properties [STYLE_PROP_HANDLE_SIZE] =
-    g_param_spec_int ("handle-size",
-                      "Handle Size",
-                      "Width of the resize handle",
-                      0,
-                      G_MAXINT,
-                      1,
-                      (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-  gtk_widget_class_install_style_property (widget_class, style_properties [STYLE_PROP_HANDLE_SIZE]);
-
-  gtk_widget_class_set_css_name (widget_class, "dockbin");
+  gtk_widget_class_set_css_name (widget_class, "pnldockbin");
 }
 
 static void
@@ -1637,10 +1893,10 @@ pnl_dock_bin_init (PnlDockBin *self)
     { (gchar *)"PNL_DOCK_BIN_WIDGET", GTK_TARGET_SAME_APP, 0 },
   };
   static const GActionEntry entries[] = {
-    { "left-visible", NULL, NULL, "false", pnl_dock_bin_visible_action },
-    { "right-visible", NULL, NULL, "false", pnl_dock_bin_visible_action },
-    { "top-visible", NULL, NULL, "false", pnl_dock_bin_visible_action },
-    { "bottom-visible", NULL, NULL, "false", pnl_dock_bin_visible_action },
+    { "left-visible", NULL, NULL, "false", pnl_dock_bin_visible_change_state },
+    { "right-visible", NULL, NULL, "false", pnl_dock_bin_visible_change_state },
+    { "top-visible", NULL, NULL, "false", pnl_dock_bin_visible_change_state },
+    { "bottom-visible", NULL, NULL, "false", pnl_dock_bin_visible_change_state },
   };
 
   gtk_widget_set_has_window (GTK_WIDGET (self), TRUE);
@@ -1898,7 +2154,7 @@ pnl_dock_bin_get_child_visible (PnlDockItem *item,
       (ancestor == priv->children [1].widget) ||
       (ancestor == priv->children [2].widget) ||
       (ancestor == priv->children [3].widget))
-    return pnl_dock_revealer_get_reveal_child (PNL_DOCK_REVEALER (ancestor));
+    return pnl_dock_revealer_get_child_revealed (PNL_DOCK_REVEALER (ancestor));
 
   return FALSE;
 }
@@ -1920,10 +2176,69 @@ pnl_dock_bin_set_child_visible (PnlDockItem *item,
     pnl_dock_revealer_set_reveal_child (PNL_DOCK_REVEALER (ancestor), child_visible);
 }
 
+static gboolean
+pnl_dock_bin_minimize (PnlDockItem     *item,
+                       PnlDockItem     *child,
+                       GtkPositionType *position)
+{
+  PnlDockBin *self = (PnlDockBin *)item;
+  PnlDockBinPrivate *priv = pnl_dock_bin_get_instance_private (self);
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+  g_assert (PNL_IS_DOCK_ITEM (child));
+  g_assert (position != NULL);
+
+  for (guint i = 0; i < LAST_PNL_DOCK_BIN_CHILD; i++)
+    {
+      const PnlDockBinChild *info = &priv->children [i];
+
+      if (info->widget != NULL && gtk_widget_is_ancestor (GTK_WIDGET (child), info->widget))
+        {
+          switch (info->type)
+            {
+            case PNL_DOCK_BIN_CHILD_LEFT:
+            case PNL_DOCK_BIN_CHILD_CENTER:
+            case LAST_PNL_DOCK_BIN_CHILD:
+            default:
+              *position = GTK_POS_LEFT;
+              break;
+
+            case PNL_DOCK_BIN_CHILD_RIGHT:
+              *position = GTK_POS_RIGHT;
+              break;
+
+            case PNL_DOCK_BIN_CHILD_TOP:
+              *position = GTK_POS_TOP;
+              break;
+
+            case PNL_DOCK_BIN_CHILD_BOTTOM:
+              *position = GTK_POS_BOTTOM;
+              break;
+            }
+
+          break;
+        }
+    }
+
+  return FALSE;
+}
+
+static void
+pnl_dock_bin_update_visibility (PnlDockItem *item)
+{
+  PnlDockBin *self = (PnlDockBin *)item;
+
+  g_assert (PNL_IS_DOCK_BIN (self));
+
+  pnl_dock_bin_update_actions (self);
+}
+
 static void
 pnl_dock_bin_init_dock_item_iface (PnlDockItemInterface *iface)
 {
   iface->present_child = pnl_dock_bin_present_child;
   iface->get_child_visible = pnl_dock_bin_get_child_visible;
   iface->set_child_visible = pnl_dock_bin_set_child_visible;
+  iface->minimize = pnl_dock_bin_minimize;
+  iface->update_visibility = pnl_dock_bin_update_visibility;
 }

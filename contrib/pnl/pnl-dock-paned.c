@@ -86,7 +86,7 @@ pnl_dock_paned_class_init (PnlDockPanedClass *klass)
 
   container_class->add = pnl_dock_paned_add;
 
-  gtk_widget_class_set_css_name (widget_class, "dockpaned");
+  gtk_widget_class_set_css_name (widget_class, "pnldockpaned");
 }
 
 static void

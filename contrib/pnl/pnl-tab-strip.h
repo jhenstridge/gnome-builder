@@ -24,17 +24,22 @@
 #ifndef PNL_TAB_STRIP_H
 #define PNL_TAB_STRIP_H
 
-#include <gtk/gtk.h>
+#include "pnl-dock-types.h"
 
 G_BEGIN_DECLS
-
-#define PNL_TYPE_TAB_STRIP (pnl_tab_strip_get_type())
-
-G_DECLARE_DERIVABLE_TYPE (PnlTabStrip, pnl_tab_strip, PNL, TAB_STRIP, GtkBox)
 
 struct _PnlTabStripClass
 {
   GtkBoxClass parent;
+
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
+  gpointer _reserved5;
+  gpointer _reserved6;
+  gpointer _reserved7;
+  gpointer _reserved8;
 };
 
 GtkWidget       *pnl_tab_strip_new             (void);
@@ -47,6 +52,11 @@ void             pnl_tab_strip_set_edge        (PnlTabStrip     *self,
 gboolean         pnl_tab_strip_get_show_labels (PnlTabStrip     *self);
 void             pnl_tab_strip_set_show_labels (PnlTabStrip     *self,
                                                 gboolean         show_labels);
+PnlTabStyle      pnl_tab_strip_get_style       (PnlTabStrip     *self);
+void             pnl_tab_strip_set_style       (PnlTabStrip     *self,
+                                                PnlTabStyle      style);
+void             pnl_tab_strip_add_control     (PnlTabStrip     *self,
+                                                GtkWidget       *widget);
 
 G_END_DECLS
 

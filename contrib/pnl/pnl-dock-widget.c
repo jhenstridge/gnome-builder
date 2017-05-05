@@ -23,20 +23,76 @@
 typedef struct
 {
   gchar *title;
+  gchar *icon_name;
+  guint can_close : 1;
 } PnlDockWidgetPrivate;
 
-G_DEFINE_TYPE_EXTENDED (PnlDockWidget, pnl_dock_widget, GTK_TYPE_BIN, 0,
+static void dock_item_iface_init (PnlDockItemInterface *iface);
+
+G_DEFINE_TYPE_EXTENDED (PnlDockWidget, pnl_dock_widget, PNL_TYPE_BIN, 0,
                         G_ADD_PRIVATE (PnlDockWidget)
-                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM, NULL))
+                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM, dock_item_iface_init))
 
 enum {
   PROP_0,
+  PROP_CAN_CLOSE,
+  PROP_ICON_NAME,
   PROP_MANAGER,
   PROP_TITLE,
   N_PROPS
 };
 
 static GParamSpec *properties [N_PROPS];
+
+static gchar *
+pnl_dock_widget_item_get_title (PnlDockItem *item)
+{
+  PnlDockWidget *self = (PnlDockWidget *)item;
+  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_DOCK_WIDGET (self), NULL);
+
+  return g_strdup (priv->title);
+}
+
+static gchar *
+pnl_dock_widget_item_get_icon_name (PnlDockItem *item)
+{
+  PnlDockWidget *self = (PnlDockWidget *)item;
+  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_DOCK_WIDGET (self), NULL);
+
+  return g_strdup (priv->icon_name);
+}
+
+static gboolean
+pnl_dock_widget_get_can_close (PnlDockItem *item)
+{
+  PnlDockWidget *self = (PnlDockWidget *)item;
+  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_DOCK_WIDGET (self), FALSE);
+
+  return priv->can_close;
+}
+
+static void
+pnl_dock_widget_set_can_close (PnlDockWidget *self,
+                               gboolean       can_close)
+{
+  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
+
+  g_return_if_fail (PNL_IS_DOCK_WIDGET (self));
+
+  can_close = !!can_close;
+
+  if (can_close != priv->can_close)
+    {
+      priv->can_close = can_close;
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_CAN_CLOSE]);
+    }
+}
 
 static void
 pnl_dock_widget_grab_focus (GtkWidget *widget)
@@ -61,6 +117,7 @@ pnl_dock_widget_finalize (GObject *object)
   PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
 
   g_clear_pointer (&priv->title, g_free);
+  g_clear_pointer (&priv->icon_name, g_free);
 
   G_OBJECT_CLASS (pnl_dock_widget_parent_class)->finalize (object);
 }
@@ -75,12 +132,20 @@ pnl_dock_widget_get_property (GObject    *object,
 
   switch (prop_id)
     {
+    case PROP_CAN_CLOSE:
+      g_value_set_boolean (value, pnl_dock_widget_get_can_close (PNL_DOCK_ITEM (self)));
+      break;
+
+    case PROP_ICON_NAME:
+      g_value_set_string (value, pnl_dock_widget_item_get_icon_name (PNL_DOCK_ITEM (self)));
+      break;
+
     case PROP_MANAGER:
       g_value_set_object (value, pnl_dock_item_get_manager (PNL_DOCK_ITEM (self)));
       break;
 
     case PROP_TITLE:
-      g_value_set_string (value, pnl_dock_widget_get_title (self));
+      g_value_set_string (value, pnl_dock_widget_item_get_title (PNL_DOCK_ITEM (self)));
       break;
 
     default:
@@ -98,6 +163,14 @@ pnl_dock_widget_set_property (GObject      *object,
 
   switch (prop_id)
     {
+    case PROP_CAN_CLOSE:
+      pnl_dock_widget_set_can_close (self, g_value_get_boolean (value));
+      break;
+
+    case PROP_ICON_NAME:
+      pnl_dock_widget_set_icon_name (self, g_value_get_string (value));
+      break;
+
     case PROP_MANAGER:
       pnl_dock_item_set_manager (PNL_DOCK_ITEM (self), g_value_get_object (value));
       break;
@@ -121,27 +194,39 @@ pnl_dock_widget_class_init (PnlDockWidgetClass *klass)
   object_class->get_property = pnl_dock_widget_get_property;
   object_class->set_property = pnl_dock_widget_set_property;
 
-  widget_class->draw = pnl_gtk_bin_draw;
   widget_class->grab_focus = pnl_dock_widget_grab_focus;
-  widget_class->size_allocate = pnl_gtk_bin_size_allocate;
+
+  properties [PROP_CAN_CLOSE] =
+    g_param_spec_boolean ("can-close",
+                          "Can Close",
+                          "If the dock widget can be closed by the user",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  properties [PROP_ICON_NAME] =
+    g_param_spec_string ("icon-name",
+                         "Icon Name",
+                         "Icon Name",
+                         NULL,
+                         (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
   properties [PROP_MANAGER] =
     g_param_spec_object ("manager",
                          "Manager",
                          "The panel manager",
                          PNL_TYPE_DOCK_MANAGER,
-                         (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                         (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
   properties [PROP_TITLE] =
     g_param_spec_string ("title",
                          "Title",
                          "Title",
                          NULL,
-                         (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+                         (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 
-  gtk_widget_class_set_css_name (widget_class, "dockwidget");
+  gtk_widget_class_set_css_name (widget_class, "pnldockwidget");
 }
 
 static void
@@ -155,16 +240,6 @@ GtkWidget *
 pnl_dock_widget_new (void)
 {
   return g_object_new (PNL_TYPE_DOCK_WIDGET, NULL);
-}
-
-const gchar *
-pnl_dock_widget_get_title (PnlDockWidget *self)
-{
-  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
-
-  g_return_val_if_fail (PNL_IS_DOCK_WIDGET (self), NULL);
-
-  return priv->title;
 }
 
 void
@@ -181,4 +256,28 @@ pnl_dock_widget_set_title (PnlDockWidget *self,
       priv->title = g_strdup (title);
       g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_TITLE]);
     }
+}
+
+void
+pnl_dock_widget_set_icon_name (PnlDockWidget *self,
+                               const gchar   *icon_name)
+{
+  PnlDockWidgetPrivate *priv = pnl_dock_widget_get_instance_private (self);
+
+  g_return_if_fail (PNL_IS_DOCK_WIDGET (self));
+
+  if (g_strcmp0 (icon_name, priv->icon_name) != 0)
+    {
+      g_free (priv->icon_name);
+      priv->icon_name = g_strdup (icon_name);
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ICON_NAME]);
+    }
+}
+
+static void
+dock_item_iface_init (PnlDockItemInterface *iface)
+{
+  iface->get_can_close = pnl_dock_widget_get_can_close;
+  iface->get_title = pnl_dock_widget_item_get_title;
+  iface->get_icon_name = pnl_dock_widget_item_get_icon_name;
 }

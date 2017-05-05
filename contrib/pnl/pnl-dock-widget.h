@@ -29,22 +29,23 @@ G_BEGIN_DECLS
 
 struct _PnlDockWidgetClass
 {
-  GtkBinClass parent;
+  PnlBinClass parent;
 
-  void (*padding1) (void);
-  void (*padding2) (void);
-  void (*padding3) (void);
-  void (*padding4) (void);
-  void (*padding5) (void);
-  void (*padding6) (void);
-  void (*padding7) (void);
-  void (*padding8) (void);
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
+  gpointer _reserved5;
+  gpointer _reserved6;
+  gpointer _reserved7;
+  gpointer _reserved8;
 };
 
-GtkWidget   *pnl_dock_widget_new       (void);
-const gchar *pnl_dock_widget_get_title (PnlDockWidget *self);
-void         pnl_dock_widget_set_title (PnlDockWidget *self,
-                                        const gchar   *title);
+GtkWidget *pnl_dock_widget_new           (void);
+void       pnl_dock_widget_set_title     (PnlDockWidget *self,
+                                          const gchar   *title);
+void       pnl_dock_widget_set_icon_name (PnlDockWidget *self,
+                                          const gchar   *icon_name);
 
 G_END_DECLS
 

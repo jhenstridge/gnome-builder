@@ -20,12 +20,14 @@
 # error "Only <pnl.h> can be included directly."
 #endif
 
-#ifndef PNL_DOCK_BIN_BIN_H
-#define PNL_DOCK_BIN_BIN_H
+#ifndef PNL_DOCK_BIN_H
+#define PNL_DOCK_BIN_H
 
 #include "pnl-dock-types.h"
 
 G_BEGIN_DECLS
+
+#define PNL_DOCK_BIN_STYLE_CLASS_PINNED "pinned"
 
 struct _PnlDockBinClass
 {
@@ -33,14 +35,14 @@ struct _PnlDockBinClass
 
   GtkWidget *(*create_edge) (PnlDockBin *self);
 
-  void (*padding1) (void);
-  void (*padding2) (void);
-  void (*padding3) (void);
-  void (*padding4) (void);
-  void (*padding5) (void);
-  void (*padding6) (void);
-  void (*padding7) (void);
-  void (*padding8) (void);
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
+  gpointer _reserved5;
+  gpointer _reserved6;
+  gpointer _reserved7;
+  gpointer _reserved8;
 };
 
 GtkWidget *pnl_dock_bin_new               (void);
@@ -52,4 +54,4 @@ GtkWidget *pnl_dock_bin_get_right_edge    (PnlDockBin   *self);
 
 G_END_DECLS
 
-#endif /* PNL_DOCK_BIN_BIN_H */
+#endif /* PNL_DOCK_BIN_H */

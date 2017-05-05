@@ -30,12 +30,23 @@ G_BEGIN_DECLS
 struct _PnlDockStackClass
 {
   GtkBoxClass parent;
+
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
 };
 
-GtkWidget       *pnl_dock_stack_new      (void);
-GtkPositionType  pnl_dock_stack_get_edge (PnlDockStack    *self);
-void             pnl_dock_stack_set_edge (PnlDockStack    *self,
-                                          GtkPositionType  edge);
+GtkWidget       *pnl_dock_stack_new                    (void);
+GtkPositionType  pnl_dock_stack_get_edge               (PnlDockStack    *self);
+void             pnl_dock_stack_set_edge               (PnlDockStack    *self,
+                                                        GtkPositionType  edge);
+PnlTabStyle      pnl_dock_stack_get_style              (PnlDockStack    *self);
+void             pnl_dock_stack_set_style              (PnlDockStack    *self,
+                                                        PnlTabStyle      style);
+gboolean         pnl_dock_stack_get_show_pinned_button (PnlDockStack    *self);
+void             pnl_dock_stack_set_show_pinned_button (PnlDockStack    *self,
+                                                        gboolean         show_pinned_button);
 
 G_END_DECLS
 

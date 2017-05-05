@@ -16,16 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#if !defined(PNL_INSIDE) && !defined(PNL_COMPILATION)
+# error "Only <pnl.h> can be included directly."
+#endif
+
 #ifndef PNL_DOCK_OVERLAY_EDGE_H
 #define PNL_DOCK_OVERLAY_EDGE_H
 
-#include <gtk/gtk.h>
+#include "pnl-dock-types.h"
 
 G_BEGIN_DECLS
-
-#define PNL_TYPE_DOCK_OVERLAY_EDGE (pnl_dock_overlay_edge_get_type())
-
-G_DECLARE_FINAL_TYPE (PnlDockOverlayEdge, pnl_dock_overlay_edge, PNL, DOCK_OVERLAY_EDGE, GtkBin)
 
 GtkPositionType pnl_dock_overlay_edge_get_edge     (PnlDockOverlayEdge *self);
 void            pnl_dock_overlay_edge_set_edge     (PnlDockOverlayEdge *self,

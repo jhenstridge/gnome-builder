@@ -29,10 +29,22 @@ G_BEGIN_DECLS
 #define pnl_set_weak_pointer(ptr,obj) \
   ((obj!=*(ptr))?(pnl_clear_weak_pointer(ptr),*(ptr)=obj,((obj)?g_object_add_weak_pointer((GObject*)obj,(gpointer*)ptr),NULL:NULL),1):0)
 
-gboolean pnl_gtk_bin_draw          (GtkWidget *widget,
-                                    cairo_t   *cr);
-void     pnl_gtk_bin_size_allocate (GtkWidget     *widget,
-                                    GtkAllocation *allocation);
+void          pnl_gtk_widget_add_class             (GtkWidget        *widget,
+                                                    const gchar      *class_name);
+gboolean      pnl_gtk_widget_activate_action       (GtkWidget        *widget,
+                                                    const gchar      *full_action_name,
+                                                    GVariant         *variant);
+GVariant     *pnl_gtk_widget_get_action_state      (GtkWidget        *widget,
+                                                    const gchar      *action_name);
+GActionGroup *pnl_gtk_widget_find_group_for_action (GtkWidget        *widget,
+                                                    const gchar      *action_name);
+void          pnl_g_action_name_parse              (const gchar      *action_name,
+                                                    gchar           **prefix,
+                                                    gchar           **name);
+void          pnl_gtk_style_context_get_borders    (GtkStyleContext  *style_context,
+                                                    GtkBorder        *borders);
+void          pnl_gtk_allocation_subtract_border   (GtkAllocation    *alloc,
+                                                    GtkBorder        *border);
 
 G_END_DECLS
 

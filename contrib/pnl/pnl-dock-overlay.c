@@ -900,7 +900,7 @@ pnl_dock_overlay_class_init (PnlDockOverlayClass *klass)
 
   gtk_container_class_install_child_properties (container_class, N_CHILD_PROPS, child_properties);
 
-  gtk_widget_class_set_css_name (widget_class, "dockoverlay");
+  gtk_widget_class_set_css_name (widget_class, "pnldockoverlay");
 
   signals [HIDE_EDGES] =
     g_signal_new ("hide-edges",

@@ -19,6 +19,7 @@
 #include "pnl-dock-bin.h"
 #include "pnl-dock-bin-edge.h"
 #include "pnl-dock-bin-edge-private.h"
+#include "pnl-dock-item.h"
 #include "pnl-dock-revealer.h"
 
 typedef struct
@@ -26,9 +27,11 @@ typedef struct
   GtkPositionType edge : 3;
 } PnlDockBinEdgePrivate;
 
+static void dock_item_iface_init (PnlDockItemInterface *iface);
+
 G_DEFINE_TYPE_EXTENDED (PnlDockBinEdge, pnl_dock_bin_edge, PNL_TYPE_DOCK_REVEALER, 0,
                         G_ADD_PRIVATE (PnlDockBinEdge)
-                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM, NULL))
+                        G_IMPLEMENT_INTERFACE (PNL_TYPE_DOCK_ITEM, dock_item_iface_init))
 
 enum {
   PROP_0,
@@ -139,6 +142,11 @@ pnl_dock_bin_edge_add (GtkContainer *container,
 
   child = gtk_bin_get_child (GTK_BIN (container));
   gtk_container_add (GTK_CONTAINER (child), widget);
+
+  if (PNL_IS_DOCK_ITEM (child))
+    pnl_dock_item_adopt (PNL_DOCK_ITEM (container), PNL_DOCK_ITEM (child));
+
+  gtk_widget_show (child);
 }
 
 static void
@@ -238,7 +246,7 @@ pnl_dock_bin_edge_class_init (PnlDockBinEdgeClass *klass)
   binding_set = gtk_binding_set_by_class (klass);
   gtk_binding_entry_add_signal (binding_set, GDK_KEY_Escape, 0, "move-to-bin-child", 0);
 
-  gtk_widget_class_set_css_name (widget_class, "dockbinedge");
+  gtk_widget_class_set_css_name (widget_class, "pnldockbinedge");
 }
 
 static void
@@ -250,6 +258,26 @@ pnl_dock_bin_edge_init (PnlDockBinEdge *self)
                         "visible", TRUE,
                         NULL);
   GTK_CONTAINER_CLASS (pnl_dock_bin_edge_parent_class)->add (GTK_CONTAINER (self), child);
+}
 
-  pnl_dock_bin_edge_update_edge (self);
+static void
+pnl_dock_bin_edge_update_visibility (PnlDockItem *item)
+{
+  PnlDockBinEdge *self = (PnlDockBinEdge *)item;
+  GtkWidget *child;
+  gboolean visible = FALSE;
+
+  g_assert (PNL_IS_DOCK_BIN_EDGE (self));
+
+  if (NULL != (child = gtk_bin_get_child (GTK_BIN (self))))
+    visible = pnl_dock_item_has_widgets (PNL_DOCK_ITEM (child));
+
+  if (visible != pnl_dock_revealer_get_reveal_child (PNL_DOCK_REVEALER (self)))
+    pnl_dock_revealer_set_reveal_child (PNL_DOCK_REVEALER (self), visible);
+}
+
+static void
+dock_item_iface_init (PnlDockItemInterface *iface)
+{
+  iface->update_visibility = pnl_dock_bin_edge_update_visibility;
 }

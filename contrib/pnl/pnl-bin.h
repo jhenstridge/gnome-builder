@@ -1,6 +1,6 @@
-/* pnl-dock-tab-strip.c
+/* pnl-bin.h
  *
- * Copyright (C) 2016 Christian Hergert <christian@hergert.me>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,26 +16,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "pnl-dock-tab-strip.h"
+#if !defined(PNL_INSIDE) && !defined(PNL_COMPILATION)
+# error "Only <pnl.h> can be included directly."
+#endif
 
-struct _PnlDockTabStrip
+#ifndef PNL_BIN_H
+#define PNL_BIN_H
+
+#include <gtk/gtk.h>
+
+G_BEGIN_DECLS
+
+#define PNL_TYPE_BIN (pnl_bin_get_type())
+
+G_DECLARE_DERIVABLE_TYPE (PnlBin, pnl_bin, PNL, BIN, GtkBin)
+
+struct _PnlBinClass
 {
-  PnlTabStrip parent;
+  GtkBinClass parent_class;
 };
 
-enum {
-  PROP_0,
-  N_PROPS
-};
+GtkWidget *pnl_bin_new (void);
 
-G_DEFINE_TYPE (PnlDockTabStrip, pnl_dock_tab_strip, PNL_TYPE_TAB_STRIP)
+G_END_DECLS
 
-static void
-pnl_dock_tab_strip_class_init (PnlDockTabStripClass *klass)
-{
-}
-
-static void
-pnl_dock_tab_strip_init (PnlDockTabStrip *strip)
-{
-}
+#endif /* PNL_BIN_H */

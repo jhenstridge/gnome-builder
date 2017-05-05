@@ -1,6 +1,6 @@
-/* pnl-dock-tab-strip.h
+/* pnl-tab-private.h
  *
- * Copyright (C) 2016 Christian Hergert <christian@hergert.me>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,19 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef PNL_DOCK_TAB_STRIP_H
-#define PNL_DOCK_TAB_STRIP_H
+#ifndef PNL_TAB_PRIVATE_H
+#define PNL_TAB_PRIVATE_H
 
-#include "pnl-tab-strip.h"
+#include "pnl-tab.h"
 
 G_BEGIN_DECLS
 
-#define PNL_TYPE_DOCK_TAB_STRIP (pnl_dock_tab_strip_get_type())
-
-G_DECLARE_FINAL_TYPE (PnlDockTabStrip, pnl_dock_tab_strip, PNL, DOCK_TAB_STRIP, PnlTabStrip)
-
-GtkWidget *pnl_dock_tab_strip_new (void);
+void _pnl_tab_update_controls (PnlTab *self);
 
 G_END_DECLS
 
-#endif /* PNL_DOCK_TAB_STRIP_H */
+#endif /* PNL_TAB_PRIVATE_H */

@@ -1,6 +1,6 @@
-/* pnl-dock-bin-edge.h
+/* pnl-child-property-action.h
  *
- * Copyright (C) 2016 Christian Hergert <chergert@redhat.com>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,31 +20,17 @@
 # error "Only <pnl.h> can be included directly."
 #endif
 
-#ifndef PNL_DOCK_BIN_EDGE_H
-#define PNL_DOCK_BIN_EDGE_H
+#ifndef PNL_CHILD_PROPERTY_ACTION_H
+#define PNL_CHILD_PROPERTY_ACTION_H
 
 #include "pnl-dock-types.h"
 
 G_BEGIN_DECLS
 
-struct _PnlDockBinEdgeClass
-{
-  PnlDockRevealerClass parent;
+#define PNL_TYPE_CHILD_PROPERTY_ACTION  (pnl_child_property_action_get_type())
 
-  void (*move_to_bin_child) (PnlDockBinEdge *self);
-
-  void (*padding1) (void);
-  void (*padding2) (void);
-  void (*padding3) (void);
-  void (*padding4) (void);
-  void (*padding5) (void);
-  void (*padding6) (void);
-  void (*padding7) (void);
-  void (*padding8) (void);
-};
-
-GtkPositionType pnl_dock_bin_edge_get_edge (PnlDockBinEdge  *self);
+G_DECLARE_FINAL_TYPE (PnlChildPropertyAction, pnl_child_property_action,  PNL, CHILD_PROPERTY_ACTION, GObject)
 
 G_END_DECLS
 
-#endif /* PNL_DOCK_BIN_EDGE_H */
+#endif /* PNL_CHILD_PROPERTY_ACTION_H */

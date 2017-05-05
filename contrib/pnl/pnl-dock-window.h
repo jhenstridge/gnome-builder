@@ -30,6 +30,15 @@ G_BEGIN_DECLS
 struct _PnlDockWindowClass
 {
   GtkWindowClass parent;
+
+  gpointer _reserved1;
+  gpointer _reserved2;
+  gpointer _reserved3;
+  gpointer _reserved4;
+  gpointer _reserved5;
+  gpointer _reserved6;
+  gpointer _reserved7;
+  gpointer _reserved8;
 };
 
 GtkWidget *pnl_dock_window_new (void);

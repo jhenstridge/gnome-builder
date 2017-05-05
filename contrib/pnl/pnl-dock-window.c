@@ -93,7 +93,7 @@ pnl_dock_window_class_init (PnlDockWindowClass *klass)
 
   g_object_class_override_property (object_class, PROP_MANAGER, "manager");
 
-  gtk_widget_class_set_css_name (widget_class, "dockwindow");
+  gtk_widget_class_set_css_name (widget_class, "pnldockwindow");
 }
 
 static void

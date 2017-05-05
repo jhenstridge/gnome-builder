@@ -16,16 +16,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define G_LOG_DOMAIN "pnl-dock-stack"
+
 #include "pnl-dock-item.h"
 #include "pnl-dock-stack.h"
 #include "pnl-dock-widget.h"
-#include "pnl-dock-tab-strip.h"
+#include "pnl-tab-private.h"
+#include "pnl-tab-strip.h"
+#include "pnl-util-private.h"
 
 typedef struct
 {
   GtkStack         *stack;
   PnlTabStrip      *tab_strip;
+  GtkButton        *pinned_button;
   GtkPositionType   edge : 2;
+  PnlTabStyle       style : 2;
 } PnlDockStackPrivate;
 
 static void pnl_dock_stack_init_dock_item_iface (PnlDockItemInterface *iface);
@@ -38,6 +44,8 @@ G_DEFINE_TYPE_EXTENDED (PnlDockStack, pnl_dock_stack, GTK_TYPE_BOX, 0,
 enum {
   PROP_0,
   PROP_EDGE,
+  PROP_SHOW_PINNED_BUTTON,
+  PROP_STYLE,
   N_PROPS
 };
 
@@ -49,14 +57,19 @@ pnl_dock_stack_add (GtkContainer *container,
 {
   PnlDockStack *self = (PnlDockStack *)container;
   PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
-  const gchar *title = NULL;
+  g_autofree gchar *icon_name = NULL;
+  g_autofree gchar *title = NULL;
 
   g_assert (PNL_IS_DOCK_STACK (self));
 
-  if (PNL_IS_DOCK_WIDGET (widget))
-    title = pnl_dock_widget_get_title (PNL_DOCK_WIDGET (widget));
+  if (PNL_IS_DOCK_ITEM (widget))
+    {
+      title = pnl_dock_item_get_title (PNL_DOCK_ITEM (widget));
+      icon_name = pnl_dock_item_get_icon_name (PNL_DOCK_ITEM (widget));
+    }
 
   gtk_container_add_with_properties (GTK_CONTAINER (priv->stack), widget,
+                                     "icon-name", icon_name,
                                      "title", title,
                                      NULL);
 
@@ -95,6 +108,14 @@ pnl_dock_stack_get_property (GObject    *object,
       g_value_set_enum (value, pnl_dock_stack_get_edge (self));
       break;
 
+    case PROP_SHOW_PINNED_BUTTON:
+      g_value_set_boolean (value, pnl_dock_stack_get_show_pinned_button (self));
+      break;
+
+    case PROP_STYLE:
+      g_value_set_flags (value, pnl_dock_stack_get_style (self));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -112,6 +133,14 @@ pnl_dock_stack_set_property (GObject      *object,
     {
     case PROP_EDGE:
       pnl_dock_stack_set_edge (self, g_value_get_enum (value));
+      break;
+
+    case PROP_SHOW_PINNED_BUTTON:
+      pnl_dock_stack_set_show_pinned_button (self, g_value_get_boolean (value));
+      break;
+
+    case PROP_STYLE:
+      pnl_dock_stack_set_style (self, g_value_get_flags (value));
       break;
 
     default:
@@ -141,9 +170,24 @@ pnl_dock_stack_class_init (PnlDockStackClass *klass)
                        GTK_POS_TOP,
                        (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
+  properties [PROP_SHOW_PINNED_BUTTON] =
+    g_param_spec_boolean ("show-pinned-button",
+                          "Show Pinned Button",
+                          "Show the pinned button to pin the dock edge",
+                          FALSE,
+                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
+  properties [PROP_STYLE] =
+    g_param_spec_flags ("style",
+                        "Style",
+                        "Style",
+                        PNL_TYPE_TAB_STYLE,
+                        PNL_TAB_BOTH,
+                        (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
   g_object_class_install_properties (object_class, N_PROPS, properties);
 
-  gtk_widget_class_set_css_name (widget_class, "dockstack");
+  gtk_widget_class_set_css_name (widget_class, "pnldockstack");
 }
 
 static void
@@ -153,23 +197,41 @@ pnl_dock_stack_init (PnlDockStack *self)
 
   gtk_orientable_set_orientation (GTK_ORIENTABLE (self), GTK_ORIENTATION_VERTICAL);
 
+  priv->style = PNL_TAB_BOTH;
   priv->edge = GTK_POS_TOP;
+
+  /*
+   * NOTE: setting a transition for the stack seems to muck up
+   *       focus, causing the old-tab to get refocused. So we can't
+   *       switch to CROSSFADE just yet.
+   */
 
   priv->stack = g_object_new (GTK_TYPE_STACK,
                               "homogeneous", TRUE,
                               "visible", TRUE,
                               NULL);
 
-  priv->tab_strip = g_object_new (PNL_TYPE_DOCK_TAB_STRIP,
+  priv->tab_strip = g_object_new (PNL_TYPE_TAB_STRIP,
                                   "edge", GTK_POS_TOP,
                                   "stack", priv->stack,
                                   "visible", TRUE,
                                   NULL);
 
+  priv->pinned_button = g_object_new (GTK_TYPE_BUTTON,
+                                      "action-name", "panel.pinned",
+                                      "child", g_object_new (GTK_TYPE_IMAGE,
+                                                             "icon-name", "window-maximize-symbolic",
+                                                             "visible", TRUE,
+                                                             NULL),
+                                      "visible", FALSE,
+                                      NULL);
+
   GTK_CONTAINER_CLASS (pnl_dock_stack_parent_class)->add (GTK_CONTAINER (self),
                                                           GTK_WIDGET (priv->tab_strip));
   GTK_CONTAINER_CLASS (pnl_dock_stack_parent_class)->add (GTK_CONTAINER (self),
                                                           GTK_WIDGET (priv->stack));
+
+  pnl_tab_strip_add_control (priv->tab_strip, GTK_WIDGET (priv->pinned_button));
 }
 
 GtkWidget *
@@ -312,9 +374,105 @@ pnl_dock_stack_set_child_visible (PnlDockItem *item,
 }
 
 static void
+update_tab_controls (GtkWidget *widget,
+                     gpointer   unused)
+{
+  g_assert (GTK_IS_WIDGET (widget));
+
+  if (PNL_IS_TAB (widget))
+    _pnl_tab_update_controls (PNL_TAB (widget));
+}
+
+static void
+pnl_dock_stack_update_visibility (PnlDockItem *item)
+{
+  PnlDockStack *self = (PnlDockStack *)item;
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_assert (PNL_IS_DOCK_STACK (self));
+
+  gtk_container_foreach (GTK_CONTAINER (priv->tab_strip),
+                         update_tab_controls,
+                         NULL);
+
+  if (!pnl_dock_item_has_widgets (item))
+    gtk_widget_hide (GTK_WIDGET (item));
+  else
+    gtk_widget_show (GTK_WIDGET (item));
+}
+
+static void
+pnl_dock_stack_release (PnlDockItem *item,
+                        PnlDockItem *child)
+{
+  PnlDockStack *self = (PnlDockStack *)item;
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_assert (PNL_IS_DOCK_STACK (self));
+  g_assert (PNL_IS_DOCK_ITEM (child));
+
+  gtk_container_remove (GTK_CONTAINER (priv->stack), GTK_WIDGET (child));
+}
+
+static void
 pnl_dock_stack_init_dock_item_iface (PnlDockItemInterface *iface)
 {
   iface->present_child = pnl_dock_stack_present_child;
   iface->get_child_visible = pnl_dock_stack_get_child_visible;
   iface->set_child_visible = pnl_dock_stack_set_child_visible;
+  iface->update_visibility = pnl_dock_stack_update_visibility;
+  iface->release = pnl_dock_stack_release;
+}
+
+gboolean
+pnl_dock_stack_get_show_pinned_button (PnlDockStack *self)
+{
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_DOCK_STACK (self), FALSE);
+
+  return gtk_widget_get_visible (GTK_WIDGET (priv->pinned_button));
+}
+
+void
+pnl_dock_stack_set_show_pinned_button (PnlDockStack *self,
+                                       gboolean      show_pinned_button)
+{
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_return_if_fail (PNL_IS_DOCK_STACK (self));
+
+  show_pinned_button = !!show_pinned_button;
+
+  if (show_pinned_button != gtk_widget_get_visible (GTK_WIDGET (priv->pinned_button)))
+    {
+      gtk_widget_set_visible (GTK_WIDGET (priv->pinned_button), show_pinned_button);
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_SHOW_PINNED_BUTTON]);
+    }
+}
+
+PnlTabStyle
+pnl_dock_stack_get_style (PnlDockStack *self)
+{
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_DOCK_STACK (self), 0);
+
+  return priv->style;
+}
+
+void
+pnl_dock_stack_set_style (PnlDockStack *self,
+                          PnlTabStyle   style)
+{
+  PnlDockStackPrivate *priv = pnl_dock_stack_get_instance_private (self);
+
+  g_return_if_fail (PNL_IS_DOCK_STACK (self));
+
+  if (priv->style != style)
+    {
+      priv->style = style;
+      pnl_tab_strip_set_style (priv->tab_strip, style);
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_STYLE]);
+    }
 }

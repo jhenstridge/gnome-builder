@@ -76,20 +76,6 @@ pnl_dock_item_real_get_manager (PnlDockItem *self)
 static void
 pnl_dock_item_real_update_visibility (PnlDockItem *self)
 {
-  GtkWidget *parent;
-
-  g_assert (PNL_IS_DOCK_ITEM (self));
-
-  for (parent = gtk_widget_get_parent (GTK_WIDGET (self));
-       parent != NULL;
-       parent = gtk_widget_get_parent (parent))
-    {
-      if (PNL_IS_DOCK_ITEM (parent))
-        {
-          pnl_dock_item_update_visibility (PNL_DOCK_ITEM (parent));
-          break;
-        }
-    }
 }
 
 static void
@@ -129,12 +115,40 @@ pnl_dock_item_real_manager_set (PnlDockItem    *self,
 }
 
 static void
+pnl_dock_item_real_release (PnlDockItem *self,
+                            PnlDockItem *child)
+{
+  g_assert (PNL_IS_DOCK_ITEM (self));
+  g_assert (PNL_IS_DOCK_ITEM (child));
+
+  g_warning ("%s does not know how to release child %s",
+             G_OBJECT_TYPE_NAME (self),
+             G_OBJECT_TYPE_NAME (child));
+}
+
+static gboolean
+pnl_dock_item_real_can_minimize (PnlDockItem *self,
+                                 PnlDockItem *descendant)
+{
+  return FALSE;
+}
+
+static gboolean
+pnl_dock_item_real_get_can_close (PnlDockItem *self)
+{
+  return FALSE;
+}
+
+static void
 pnl_dock_item_default_init (PnlDockItemInterface *iface)
 {
   iface->get_manager = pnl_dock_item_real_get_manager;
   iface->set_manager = pnl_dock_item_real_set_manager;
   iface->manager_set = pnl_dock_item_real_manager_set;
   iface->update_visibility = pnl_dock_item_real_update_visibility;
+  iface->release = pnl_dock_item_real_release;
+  iface->get_can_close = pnl_dock_item_real_get_can_close;
+  iface->can_minimize = pnl_dock_item_real_can_minimize;
 
   signals [MANAGER_SET] =
     g_signal_new ("manager-set",
@@ -181,9 +195,19 @@ pnl_dock_item_set_manager (PnlDockItem    *self,
 void
 pnl_dock_item_update_visibility (PnlDockItem *self)
 {
+  GtkWidget *parent;
+
   g_return_if_fail (PNL_IS_DOCK_ITEM (self));
 
   PNL_DOCK_ITEM_GET_IFACE (self)->update_visibility (self);
+
+  for (parent = gtk_widget_get_parent (GTK_WIDGET (self));
+       parent != NULL;
+       parent = gtk_widget_get_parent (parent))
+    {
+      if (PNL_IS_DOCK_ITEM (parent))
+        PNL_DOCK_ITEM_GET_IFACE (parent)->update_visibility (PNL_DOCK_ITEM (parent));
+    }
 }
 
 static void
@@ -453,4 +477,183 @@ pnl_dock_item_set_child_visible (PnlDockItem *self,
 
   if (PNL_DOCK_ITEM_GET_IFACE (self)->set_child_visible)
     PNL_DOCK_ITEM_GET_IFACE (self)->set_child_visible (self, child, child_visible);
+}
+
+/**
+ * pnl_dock_item_get_can_close:
+ * @self: a #PnlDockItem
+ *
+ * If this dock item can be closed by the user, this virtual function should be
+ * implemented by the panel and return %TRUE.
+ *
+ * Returns: %TRUE if the dock item can be closed by the user, otherwise %FALSE.
+ */
+gboolean
+pnl_dock_item_get_can_close (PnlDockItem *self)
+{
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), FALSE);
+
+  if (PNL_DOCK_ITEM_GET_IFACE (self)->get_can_close)
+    return PNL_DOCK_ITEM_GET_IFACE (self)->get_can_close (self);
+
+  return FALSE;
+}
+
+/**
+ * pnl_dock_item_close:
+ * @self: a #PnlDockItem
+ *
+ * This function will request that the dock item close itself.
+ *
+ * Returns: %TRUE if the dock item was closed
+ */
+gboolean
+pnl_dock_item_close (PnlDockItem *self)
+{
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), FALSE);
+
+  if (pnl_dock_item_get_can_close (self))
+    {
+      if (PNL_DOCK_ITEM_GET_IFACE (self)->close)
+        return PNL_DOCK_ITEM_GET_IFACE (self)->close (self);
+
+      gtk_widget_destroy (GTK_WIDGET (self));
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+/**
+ * pnl_dock_item_minimize:
+ * @self: a #PnlDockItem
+ * @child: A #PnlDockItem that is a child of @self
+ * @position: (inout): A location for a #GtkPositionType
+ *
+ * This requests that @self minimize @child if it knows how.
+ *
+ * If not, it should suggest the gravity for @child if it knows how to
+ * determine that. For example, a #PnlDockBin might know if the widget was part
+ * of the right panel and therefore may set @position to %GTK_POS_RIGHT.
+ *
+ * Returns: %TRUE if @child was minimized. Otherwise %FALSE and @position
+ *   may be updated to a suggested position.
+ */
+gboolean
+pnl_dock_item_minimize (PnlDockItem     *self,
+                        PnlDockItem     *child,
+                        GtkPositionType *position)
+{
+  GtkPositionType unused = GTK_POS_LEFT;
+
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), FALSE);
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (child), FALSE);
+  g_return_val_if_fail (self != child, FALSE);
+
+  if (position == NULL)
+    position = &unused;
+
+  if (PNL_DOCK_ITEM_GET_IFACE (self)->minimize)
+    return PNL_DOCK_ITEM_GET_IFACE (self)->minimize (self, child, position);
+
+  return FALSE;
+}
+
+/**
+ * pnl_dock_item_get_title:
+ * @self: A #PnlDockItem
+ *
+ * Gets the title for the #PnlDockItem.
+ *
+ * Generally, you want to use a #PnlDockWidget which has a "title" property you
+ * can set. But this can be helpful for integration of various container
+ * widgets.
+ *
+ * Returns: (transfer full) (nullable): A newly allocated string or %NULL.
+ */
+gchar *
+pnl_dock_item_get_title (PnlDockItem *self)
+{
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), NULL);
+
+  if (PNL_DOCK_ITEM_GET_IFACE (self)->get_title)
+    return PNL_DOCK_ITEM_GET_IFACE (self)->get_title (self);
+
+  return NULL;
+}
+
+/**
+ * pnl_dock_item_get_icon_name:
+ * @self: A #PnlDockItem
+ *
+ * Gets the icon_name for the #PnlDockItem.
+ *
+ * Generally, you want to use a #PnlDockWidget which has a "icon-name" property
+ * you can set. But this can be helpful for integration of various container
+ * widgets.
+ *
+ * Returns: (transfer full) (nullable): A newly allocated string or %NULL.
+ */
+gchar *
+pnl_dock_item_get_icon_name (PnlDockItem *self)
+{
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), NULL);
+
+  if (PNL_DOCK_ITEM_GET_IFACE (self)->get_icon_name)
+    return PNL_DOCK_ITEM_GET_IFACE (self)->get_icon_name (self);
+
+  return NULL;
+}
+
+/**
+ * pnl_dock_item_release:
+ * @self: A #PnlDockItem
+ *
+ * This virtual method should remove @child from @self if the
+ * dock item knows how to do so. For example, the #PnlDockStack
+ * will remove @child from it's internal #GtkStack.
+ *
+ * After the virtual function has been executed, child tracking
+ * will be removed so that #PnlDockItem implementations do not
+ * need to implement themselves.
+ */
+void
+pnl_dock_item_release (PnlDockItem     *self,
+                       PnlDockItem     *child)
+{
+  g_return_if_fail (PNL_IS_DOCK_ITEM (self));
+  g_return_if_fail (self == pnl_dock_item_get_parent (child));
+
+  PNL_DOCK_ITEM_GET_IFACE (self)->release (self, child);
+
+  g_object_weak_unref (G_OBJECT (child),
+                       pnl_dock_item_child_weak_notify,
+                       self);
+  pnl_dock_item_child_weak_notify (self, (GObject *)child);
+}
+
+/**
+ * pnl_dock_item_get_can_minimize: (virtual can_minimize)
+ * @self: a #PnlDockItem
+ *
+ * Returns: %TRUE if the widget can be minimized.
+ */
+gboolean
+pnl_dock_item_get_can_minimize (PnlDockItem *self)
+{
+  PnlDockItem *parent;
+
+  g_return_val_if_fail (PNL_IS_DOCK_ITEM (self), FALSE);
+
+  parent = pnl_dock_item_get_parent (self);
+
+  while (parent != NULL)
+    {
+      if (PNL_DOCK_ITEM_GET_IFACE (parent)->can_minimize (parent, self))
+        return TRUE;
+      parent = pnl_dock_item_get_parent (parent);
+    }
+
+  return FALSE;
 }

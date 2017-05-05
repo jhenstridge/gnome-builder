@@ -25,31 +25,52 @@
 
 #include <gtk/gtk.h>
 
+#include "pnl-bin.h"
+#include "pnl-dock-revealer.h"
 #include "pnl-multi-paned.h"
 
 G_BEGIN_DECLS
 
-#define PNL_TYPE_DOCK          (pnl_dock_get_type ())
-#define PNL_TYPE_DOCK_BIN      (pnl_dock_bin_get_type())
-#define PNL_TYPE_DOCK_ITEM     (pnl_dock_item_get_type())
-#define PNL_TYPE_DOCK_MANAGER  (pnl_dock_manager_get_type())
-#define PNL_TYPE_DOCK_OVERLAY  (pnl_dock_overlay_get_type())
-#define PNL_TYPE_DOCK_PANED    (pnl_dock_paned_get_type())
-#define PNL_TYPE_DOCK_REVEALER (pnl_dock_revealer_get_type())
-#define PNL_TYPE_DOCK_STACK    (pnl_dock_stack_get_type())
-#define PNL_TYPE_DOCK_WIDGET   (pnl_dock_widget_get_type())
-#define PNL_TYPE_DOCK_WINDOW   (pnl_dock_window_get_type())
+#define PNL_TYPE_DOCK                   (pnl_dock_get_type ())
+#define PNL_TYPE_DOCK_BIN               (pnl_dock_bin_get_type())
+#define PNL_TYPE_DOCK_BIN_EDGE          (pnl_dock_bin_edge_get_type())
+#define PNL_TYPE_DOCK_ITEM              (pnl_dock_item_get_type())
+#define PNL_TYPE_DOCK_MANAGER           (pnl_dock_manager_get_type())
+#define PNL_TYPE_DOCK_OVERLAY           (pnl_dock_overlay_get_type())
+#define PNL_TYPE_DOCK_OVERLAY_EDGE      (pnl_dock_overlay_edge_get_type())
+#define PNL_TYPE_DOCK_PANED             (pnl_dock_paned_get_type())
+#define PNL_TYPE_DOCK_STACK             (pnl_dock_stack_get_type())
+#define PNL_TYPE_DOCK_TAB_STRIP         (pnl_dock_tab_strip_get_type())
+#define PNL_TYPE_DOCK_WIDGET            (pnl_dock_widget_get_type())
+#define PNL_TYPE_DOCK_WINDOW            (pnl_dock_window_get_type())
+#define PNL_TYPE_TAB                    (pnl_tab_get_type())
+#define PNL_TYPE_TAB_STRIP              (pnl_tab_strip_get_type())
+#define PNL_TYPE_TAB_STYLE              (pnl_tab_style_get_type())
 
-G_DECLARE_INTERFACE      (PnlDock,         pnl_dock,          PNL, DOCK,          GtkContainer)
-G_DECLARE_DERIVABLE_TYPE (PnlDockBin,      pnl_dock_bin,      PNL, DOCK_BIN,      GtkContainer)
-G_DECLARE_INTERFACE      (PnlDockItem,     pnl_dock_item,     PNL, DOCK_ITEM,     GtkWidget)
-G_DECLARE_DERIVABLE_TYPE (PnlDockManager,  pnl_dock_manager,  PNL, DOCK_MANAGER,  GObject)
-G_DECLARE_DERIVABLE_TYPE (PnlDockOverlay,  pnl_dock_overlay,  PNL, DOCK_OVERLAY,  GtkEventBox)
-G_DECLARE_DERIVABLE_TYPE (PnlDockPaned,    pnl_dock_paned,    PNL, DOCK_PANED,    PnlMultiPaned)
-G_DECLARE_DERIVABLE_TYPE (PnlDockRevealer, pnl_dock_revealer, PNL, DOCK_REVEALER, GtkBin)
-G_DECLARE_DERIVABLE_TYPE (PnlDockStack,    pnl_dock_stack,    PNL, DOCK_STACK,    GtkBox)
-G_DECLARE_DERIVABLE_TYPE (PnlDockWidget,   pnl_dock_widget,   PNL, DOCK_WIDGET,   GtkBin)
-G_DECLARE_DERIVABLE_TYPE (PnlDockWindow,   pnl_dock_window,   PNL, DOCK_WINDOW,   GtkWindow)
+G_DECLARE_DERIVABLE_TYPE (PnlDockBin,             pnl_dock_bin,               PNL, DOCK_BIN,              GtkContainer)
+G_DECLARE_DERIVABLE_TYPE (PnlDockBinEdge,         pnl_dock_bin_edge,          PNL, DOCK_BIN_EDGE,         PnlDockRevealer)
+G_DECLARE_DERIVABLE_TYPE (PnlDockManager,         pnl_dock_manager,           PNL, DOCK_MANAGER,          GObject)
+G_DECLARE_DERIVABLE_TYPE (PnlDockOverlay,         pnl_dock_overlay,           PNL, DOCK_OVERLAY,          GtkEventBox)
+G_DECLARE_DERIVABLE_TYPE (PnlDockPaned,           pnl_dock_paned,             PNL, DOCK_PANED,            PnlMultiPaned)
+G_DECLARE_DERIVABLE_TYPE (PnlDockStack,           pnl_dock_stack,             PNL, DOCK_STACK,            GtkBox)
+G_DECLARE_DERIVABLE_TYPE (PnlDockWidget,          pnl_dock_widget,            PNL, DOCK_WIDGET,           PnlBin)
+G_DECLARE_DERIVABLE_TYPE (PnlDockWindow,          pnl_dock_window,            PNL, DOCK_WINDOW,           GtkWindow)
+G_DECLARE_DERIVABLE_TYPE (PnlTabStrip,            pnl_tab_strip,              PNL, TAB_STRIP,             GtkBox)
+
+G_DECLARE_FINAL_TYPE     (PnlTab,                 pnl_tab,                    PNL, TAB,                   PnlBin)
+G_DECLARE_FINAL_TYPE     (PnlDockOverlayEdge,     pnl_dock_overlay_edge,      PNL, DOCK_OVERLAY_EDGE,     PnlBin)
+
+G_DECLARE_INTERFACE      (PnlDock,                pnl_dock,                   PNL, DOCK,                  GtkContainer)
+G_DECLARE_INTERFACE      (PnlDockItem,            pnl_dock_item,              PNL, DOCK_ITEM,             GtkWidget)
+
+typedef enum
+{
+  PNL_TAB_TEXT  = 1 << 0,
+  PNL_TAB_ICONS = 1 << 1,
+  PNL_TAB_BOTH  = (PNL_TAB_TEXT | PNL_TAB_ICONS),
+} PnlTabStyle;
+
+GType pnl_tab_style_get_type (void);
 
 G_END_DECLS
 

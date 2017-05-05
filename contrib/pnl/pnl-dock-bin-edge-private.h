@@ -16,6 +16,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#if !defined(PNL_INSIDE) && !defined(PNL_COMPILATION)
+# error "Only <pnl.h> can be included directly."
+#endif
+
 #ifndef PNL_DOCK_BIN_EDGE_PRIVATE_H
 #define PNL_DOCK_BIN_EDGE_PRIVATE_H
 
@@ -23,8 +27,8 @@
 
 G_BEGIN_DECLS
 
-void            pnl_dock_bin_edge_set_edge (PnlDockBinEdge  *self,
-                                            GtkPositionType  bin_edge);
+void pnl_dock_bin_edge_set_edge (PnlDockBinEdge  *self,
+                                 GtkPositionType  bin_edge);
 
 G_END_DECLS
 

@@ -17,6 +17,10 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+#define G_LOG_DOMAIN "pnl-tab-strip"
+
+#include "pnl-dock-item.h"
+#include "pnl-dock-widget.h"
 #include "pnl-tab.h"
 #include "pnl-tab-strip.h"
 
@@ -25,14 +29,20 @@ typedef struct
   GAction         *action;
   GtkStack        *stack;
   GtkPositionType  edge : 2;
+  PnlTabStyle      style : 2;
 } PnlTabStripPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (PnlTabStrip, pnl_tab_strip, GTK_TYPE_BOX)
+static void buildable_iface_init (GtkBuildableIface *iface);
+
+G_DEFINE_TYPE_WITH_CODE (PnlTabStrip, pnl_tab_strip, GTK_TYPE_BOX,
+                         G_ADD_PRIVATE (PnlTabStrip)
+                         G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE, buildable_iface_init))
 
 enum {
   PROP_0,
   PROP_EDGE,
   PROP_STACK,
+  PROP_STYLE,
   N_PROPS
 };
 
@@ -73,7 +83,7 @@ set_tab_state (GSimpleAction *action,
        * manually setting the state.
        */
       if (PNL_IS_TAB (tab))
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (tab), TRUE);
+        pnl_tab_set_active (PNL_TAB (tab), TRUE);
     }
 }
 
@@ -90,8 +100,11 @@ pnl_tab_strip_update_action_targets (PnlTabStrip *self)
 
   for (i = 0, iter = list; iter != NULL; iter = iter->next, i++)
     {
-      PnlTab *tab = iter->data;
-      gtk_actionable_set_action_target (GTK_ACTIONABLE (tab), "i", i);
+      GtkWidget *widget = iter->data;
+
+      /* Ignore controls, and just update tabs */
+      if (PNL_IS_TAB (widget))
+        gtk_actionable_set_action_target (GTK_ACTIONABLE (widget), "i", i);
     }
 
   g_list_free (list);
@@ -165,6 +178,10 @@ pnl_tab_strip_get_property (GObject    *object,
       g_value_set_object (value, pnl_tab_strip_get_stack (self));
       break;
 
+    case PROP_STYLE:
+      g_value_set_flags (value, pnl_tab_strip_get_style (self));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
     }
@@ -186,6 +203,10 @@ pnl_tab_strip_set_property (GObject      *object,
 
     case PROP_STACK:
       pnl_tab_strip_set_stack (self, g_value_get_object (value));
+      break;
+
+    case PROP_STYLE:
+      pnl_tab_strip_set_style (self, g_value_get_flags (value));
       break;
 
     default:
@@ -216,6 +237,14 @@ pnl_tab_strip_class_init (PnlTabStripClass *klass)
                        GTK_POS_TOP,
                        (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
 
+  properties [PROP_STYLE] =
+    g_param_spec_flags ("style",
+                        "Style",
+                        "The tab style",
+                        PNL_TYPE_TAB_STYLE,
+                        PNL_TAB_BOTH,
+                        (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
+
   properties [PROP_STACK] =
     g_param_spec_object ("stack",
                          "Stack",
@@ -225,7 +254,7 @@ pnl_tab_strip_class_init (PnlTabStripClass *klass)
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 
-  gtk_widget_class_set_css_name (widget_class, "docktabstrip");
+  gtk_widget_class_set_css_name (widget_class, "pnltabstrip");
 }
 
 static void
@@ -236,6 +265,8 @@ pnl_tab_strip_init (PnlTabStrip *self)
   static const GActionEntry entries[] = {
     { "tab", NULL, "i", "0", set_tab_state },
   };
+
+  priv->style = PNL_TAB_BOTH;
 
   gtk_orientable_set_orientation (GTK_ORIENTABLE (self), GTK_ORIENTATION_HORIZONTAL);
 
@@ -299,7 +330,7 @@ pnl_tab_strip_child_title_changed (PnlTabStrip *self,
                                    GParamSpec  *pspec,
                                    GtkWidget   *child)
 {
-  g_autofree gchar *title = NULL;
+  gchar *title = NULL;
   GtkWidget *parent;
   PnlTab *tab;
 
@@ -320,6 +351,38 @@ pnl_tab_strip_child_title_changed (PnlTabStrip *self,
                            NULL);
 
   pnl_tab_set_title (tab, title);
+
+  g_free (title);
+}
+
+static void
+pnl_tab_strip_child_icon_name_changed (PnlTabStrip *self,
+                                       GParamSpec  *pspec,
+                                       GtkWidget   *child)
+{
+  gchar *icon_name = NULL;
+  GtkWidget *parent;
+  PnlTab *tab;
+
+  g_assert (PNL_IS_TAB_STRIP (self));
+  g_assert (GTK_IS_WIDGET (child));
+
+  tab = g_object_get_data (G_OBJECT (child), "PNL_TAB");
+
+  if (!PNL_IS_TAB (tab))
+    return;
+
+  parent = gtk_widget_get_parent (child);
+
+  g_assert (GTK_IS_STACK (parent));
+
+  gtk_container_child_get (GTK_CONTAINER (parent), child,
+                           "icon-name", &icon_name,
+                           NULL);
+
+  pnl_tab_set_icon_name (tab, icon_name);
+
+  g_free (icon_name);
 }
 
 static void
@@ -339,7 +402,7 @@ pnl_tab_strip_stack_notify_visible_child (PnlTabStrip *self,
       PnlTab *tab = g_object_get_data (G_OBJECT (visible), "PNL_TAB");
 
       if (PNL_IS_TAB (tab))
-        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (tab), TRUE);
+        pnl_tab_set_active (PNL_TAB (tab), TRUE);
     }
 }
 
@@ -354,7 +417,7 @@ pnl_tab_strip_tab_clicked (PnlTabStrip *self,
 
   if (NULL != (widget = pnl_tab_get_widget (tab)))
     {
-      if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (tab)))
+      if (pnl_tab_get_active (tab))
         gtk_widget_grab_focus (widget);
     }
 }
@@ -367,15 +430,21 @@ pnl_tab_strip_stack_add (PnlTabStrip *self,
   PnlTabStripPrivate *priv = pnl_tab_strip_get_instance_private (self);
   g_autoptr(GVariant) target = g_variant_ref_sink (g_variant_new_int32 (0));
   PnlTab *tab;
+  gboolean can_close = FALSE;
 
   g_assert (PNL_IS_TAB_STRIP (self));
   g_assert (GTK_IS_WIDGET (widget));
   g_assert (GTK_IS_STACK (stack));
 
+  if (PNL_IS_DOCK_ITEM (widget))
+    can_close = pnl_dock_item_get_can_close (PNL_DOCK_ITEM (widget));
+
   tab = g_object_new (PNL_TYPE_TAB,
                       "action-name", "tab-strip.tab",
                       "action-target", target,
+                      "can-close", can_close,
                       "edge", priv->edge,
+                      "style", priv->style,
                       "widget", widget,
                       NULL);
 
@@ -399,11 +468,25 @@ pnl_tab_strip_stack_add (PnlTabStrip *self,
                            self,
                            G_CONNECT_SWAPPED);
 
-  gtk_container_add (GTK_CONTAINER (self), GTK_WIDGET (tab));
+  g_signal_connect_object (widget,
+                           "child-notify::icon-name",
+                           G_CALLBACK (pnl_tab_strip_child_icon_name_changed),
+                           self,
+                           G_CONNECT_SWAPPED);
+
+  gtk_container_add_with_properties (GTK_CONTAINER (self), GTK_WIDGET (tab),
+                                     "pack-type", GTK_PACK_START,
+                                     "expand", TRUE,
+                                     "fill", TRUE,
+                                     NULL);
 
   g_object_bind_property (widget, "visible", tab, "visible", G_BINDING_SYNC_CREATE);
 
+  if (PNL_IS_DOCK_WIDGET (widget))
+    g_object_bind_property (widget, "can-close", tab, "can-close", 0);
+
   pnl_tab_strip_child_title_changed (self, NULL, widget);
+  pnl_tab_strip_child_icon_name_changed (self, NULL, widget);
   pnl_tab_strip_stack_notify_visible_child (self, NULL, stack);
 }
 
@@ -565,10 +648,10 @@ pnl_tab_strip_set_edge (PnlTabStrip     *self,
 
       style_context = gtk_widget_get_style_context (GTK_WIDGET (self));
 
-      gtk_style_context_remove_class (style_context, "left-edge");
-      gtk_style_context_remove_class (style_context, "top-edge");
-      gtk_style_context_remove_class (style_context, "right-edge");
-      gtk_style_context_remove_class (style_context, "bottom-edge");
+      gtk_style_context_remove_class (style_context, "left");
+      gtk_style_context_remove_class (style_context, "top");
+      gtk_style_context_remove_class (style_context, "right");
+      gtk_style_context_remove_class (style_context, "bottom");
 
       switch (edge)
         {
@@ -596,4 +679,83 @@ pnl_tab_strip_set_edge (PnlTabStrip     *self,
 
       g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_EDGE]);
     }
+}
+
+static void
+apply_style (GtkWidget *widget,
+             gpointer   user_data)
+{
+  PnlTabStyle style = GPOINTER_TO_UINT (user_data);
+
+  g_assert (GTK_IS_WIDGET (widget));
+
+  if (PNL_IS_TAB (widget))
+    pnl_tab_set_style (PNL_TAB (widget), style);
+}
+
+guint
+pnl_tab_strip_get_style (PnlTabStrip *self)
+{
+  PnlTabStripPrivate *priv = pnl_tab_strip_get_instance_private (self);
+
+  g_return_val_if_fail (PNL_IS_TAB_STRIP (self), 0);
+
+  return priv->style;
+}
+
+void
+pnl_tab_strip_set_style (PnlTabStrip *self,
+                         PnlTabStyle  style)
+{
+  PnlTabStripPrivate *priv = pnl_tab_strip_get_instance_private (self);
+
+  g_return_if_fail (PNL_IS_TAB_STRIP (self));
+
+  if (style != priv->style)
+    {
+      priv->style = style;
+      gtk_container_foreach (GTK_CONTAINER (self), apply_style, GUINT_TO_POINTER (style));
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_STYLE]);
+    }
+}
+
+void
+pnl_tab_strip_add_control (PnlTabStrip *self,
+                           GtkWidget   *widget)
+{
+  g_return_if_fail (PNL_IS_TAB_STRIP (self));
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  gtk_container_add_with_properties (GTK_CONTAINER (self), widget,
+                                     "pack-type", GTK_PACK_END,
+                                     "expand", FALSE,
+                                     "fill", FALSE,
+                                     NULL);
+
+  gtk_style_context_add_class (gtk_widget_get_style_context (widget), "control");
+}
+
+static void
+pnl_tab_strip_add_child (GtkBuildable *buildable,
+                         GtkBuilder   *builder,
+                         GObject      *child,
+                         const gchar  *child_type)
+{
+  PnlTabStrip *self = (PnlTabStrip *)buildable;
+
+  g_assert (PNL_IS_TAB_STRIP (self));
+  g_assert (GTK_IS_BUILDER (builder));
+  g_assert (G_IS_OBJECT (child));
+
+  if (g_strcmp0 (child_type, "control") == 0 && GTK_IS_WIDGET (child))
+    pnl_tab_strip_add_control (self, GTK_WIDGET (child));
+  else
+    g_warning ("I do not know how to add %s of type %s",
+               G_OBJECT_TYPE_NAME (child), child_type ? child_type : "NULL");
+}
+
+static void
+buildable_iface_init (GtkBuildableIface *iface)
+{
+  iface->add_child = pnl_tab_strip_add_child;
 }
