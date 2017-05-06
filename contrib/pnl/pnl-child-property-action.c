@@ -273,8 +273,7 @@ pnl_child_property_action_activate (GAction  *action,
 
   g_assert (PNL_IS_CHILD_PROPERTY_ACTION (self));
 
-  if (parameter == NULL &&
-      self->container != NULL &&
+  if (self->container != NULL &&
       self->child != NULL &&
       self->child_property_name != NULL)
     {
@@ -305,25 +304,28 @@ pnl_child_property_action_activate (GAction  *action,
                   g_value_set_boolean (&value, !g_value_get_boolean (&previous));
                 }
             }
-          else if (G_IS_PARAM_SPEC_INT (pspec))
+          else if (G_IS_PARAM_SPEC_INT (pspec) && parameter != NULL)
             {
               g_value_init (&value, G_TYPE_INT);
               g_value_set_int (&value, g_variant_get_int32 (parameter));
             }
-          else if (G_IS_PARAM_SPEC_UINT (pspec))
+          else if (G_IS_PARAM_SPEC_UINT (pspec) && parameter != NULL)
             {
               g_value_init (&value, G_TYPE_UINT);
               g_value_set_uint (&value, g_variant_get_uint32 (parameter));
             }
-          else if (G_IS_PARAM_SPEC_STRING (pspec))
+          else if (G_IS_PARAM_SPEC_STRING (pspec) && parameter != NULL)
             {
               g_value_init (&value, G_TYPE_STRING);
               g_value_set_string (&value, g_variant_get_string (parameter, NULL));
             }
           else if (G_IS_PARAM_SPEC_DOUBLE (pspec) || G_IS_PARAM_SPEC_FLOAT (pspec))
             {
-              g_value_init (&value, G_TYPE_DOUBLE);
-              g_value_set_double (&value, g_variant_get_double (parameter));
+              if (parameter != NULL)
+                {
+                  g_value_init (&value, G_TYPE_DOUBLE);
+                  g_value_set_double (&value, g_variant_get_double (parameter));
+                }
             }
           else
             {
