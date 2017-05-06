@@ -235,7 +235,7 @@ GActionGroup *
 pnl_gtk_widget_find_group_for_action (GtkWidget   *widget,
                                       const gchar *action_name)
 {
-  GActionGroup *group;
+  GActionGroup *group = NULL;
   gchar *prefix = NULL;
   gchar *name = NULL;
 
