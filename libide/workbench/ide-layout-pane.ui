@@ -4,6 +4,7 @@
   <template class="IdeLayoutPane" parent="PnlDockBinEdge">
     <child>
       <object class="PnlDockStack" id="dock_stack">
+        <property name="show-pinned-button">true</property>
         <property name="expand">true</property>
         <property name="visible">true</property>
       </object>
