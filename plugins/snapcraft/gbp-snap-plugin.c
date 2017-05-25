@@ -20,6 +20,7 @@
 #include <ide.h>
 
 #include "gbp-snap-build-system.h"
+#include "gbp-snap-pipeline-addin.h"
 
 void
 peas_register_types (PeasObjectModule *module)
@@ -32,4 +33,7 @@ peas_register_types (PeasObjectModule *module)
   peas_object_module_register_extension_type (module,
                                               IDE_TYPE_BUILD_SYSTEM,
                                               GBP_TYPE_SNAP_BUILD_SYSTEM);
+  peas_object_module_register_extension_type (module,
+                                              IDE_TYPE_BUILD_PIPELINE_ADDIN,
+                                              GBP_TYPE_SNAP_PIPELINE_ADDIN);
 }
