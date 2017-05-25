@@ -54,6 +54,7 @@ subdir('quick-highlight')
 subdir('retab')
 subdir('rust-langserv')
 subdir('rustup')
+subdir('snapcraft')
 subdir('spellcheck')
 subdir('support')
 subdir('symbol-tree')
@@ -108,6 +109,7 @@ status += [
   'Retab ................. : @0@'.format(get_option('with_retab')),
   'Rust Language Server .. : @0@'.format(get_option('with_rust_langserv')),
   'RustUp ................ : @0@'.format(get_option('with_rustup')),
+  'Snapcraft ............. : @0@'.format(get_option('with_snapcraft')),
   'Spellchecking ......... : @0@'.format(get_option('with_spellcheck')),
   'Support Tool .......... : @0@'.format(get_option('with_support')),
   'Symbol Tree ........... : @0@'.format(get_option('with_symbol_tree')),
