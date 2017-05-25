@@ -1,4 +1,4 @@
-/* gbp-flatpak-plugin.c
+/* gbp-snap-build-system.h
  *
  * Copyright (C) 2017 Canonical Ltd.
  *
@@ -16,20 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <libpeas/peas.h>
+#ifndef GBP_SNAP_BUILD_SYSTEM_H
+#define GBP_SNAP_BUILD_SYSTEM_H
+
 #include <ide.h>
 
-#include "gbp-snap-build-system.h"
+G_BEGIN_DECLS
 
-void
-peas_register_types (PeasObjectModule *module)
-{
-  /* these should only be ignored at the top level */
-  ide_vcs_register_ignored ("parts");
-  ide_vcs_register_ignored ("stage");
-  ide_vcs_register_ignored ("prime");
+#define GBP_TYPE_SNAP_BUILD_SYSTEM (gbp_snap_build_system_get_type())
 
-  peas_object_module_register_extension_type (module,
-                                              IDE_TYPE_BUILD_SYSTEM,
-                                              GBP_TYPE_SNAP_BUILD_SYSTEM);
-}
+G_DECLARE_FINAL_TYPE (GbpSnapBuildSystem, gbp_snap_build_system, GBP, SNAP_BUILD_SYSTEM, IdeObject)
+
+G_END_DECLS
+
+#endif /* GBP_SNAP_BUILD_SYSTEM_H */
