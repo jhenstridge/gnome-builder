@@ -25,6 +25,7 @@ struct _GbpSnapBuildSystem
 {
   IdeObject parent;
   GFile *project_file;
+  GFile *project_directory;
 };
 
 enum {
@@ -85,22 +86,48 @@ gbp_snap_build_system_discover_worker (GTask        *task,
 }
 
 static void
+gbp_snap_build_system_set_project_file (GbpSnapBuildSystem *self,
+                                        GFile *project_file)
+{
+  g_autoptr(GFile) parent = NULL;
+  g_autofree char *basename = NULL;
+  g_autofree char *parent_basename = NULL;
+
+  g_clear_object (&self->project_file);
+  g_clear_object (&self->project_directory);
+
+  self->project_file = g_object_ref (project_file);
+
+  /* Determine the project directory: if the file ends in
+   * "snap/snapcraft.yaml", then the project is rooted in the
+   * parent. */
+  basename = g_file_get_basename (project_file);
+  parent = g_file_get_parent (project_file);
+  parent_basename = g_file_get_basename (parent);
+  if (!g_strcmp0(basename, "snapcraft.yaml") &&
+      !g_strcmp0(parent_basename, "snap"))
+    self->project_directory = g_file_get_parent (parent);
+  else
+    self->project_directory = g_object_ref (parent);
+}
+
+static void
 gbp_snap_build_system_init_async (GAsyncInitable      *initable,
                                   gint                 io_priority,
                                   GCancellable        *cancellable,
                                   GAsyncReadyCallback  callback,
                                   gpointer             user_data)
 {
-  GbpSnapBuildSystem *system = (GbpSnapBuildSystem *)initable;
+  GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)initable;
   g_autoptr(GTask) task = NULL;
   IdeContext *context;
   GFile *project_file;
 
-  g_return_if_fail (GBP_IS_SNAP_BUILD_SYSTEM (system));
+  g_return_if_fail (GBP_IS_SNAP_BUILD_SYSTEM (self));
   g_return_if_fail (!cancellable || G_IS_CANCELLABLE (cancellable));
 
   task = g_task_new (initable, cancellable, callback, user_data);
-  context = ide_object_get_context (IDE_OBJECT (system));
+  context = ide_object_get_context (IDE_OBJECT (self));
   project_file = ide_context_get_project_file (context);
   g_task_set_task_data (task, g_object_ref (project_file), g_object_unref);
   g_task_run_in_thread (task, gbp_snap_build_system_discover_worker);
@@ -111,6 +138,7 @@ gbp_snap_build_system_init_finish (GAsyncInitable  *initable,
                                    GAsyncResult    *result,
                                    GError         **error)
 {
+  GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)initable;
   GTask *task = (GTask *)result;
   g_autoptr(GFile) project_file = NULL;
 
@@ -120,7 +148,7 @@ gbp_snap_build_system_init_finish (GAsyncInitable  *initable,
   project_file = g_task_propagate_pointer (task, error);
   if (project_file)
     {
-      g_object_set (initable, "project-file", project_file, NULL);
+      gbp_snap_build_system_set_project_file (self, project_file);
     }
 
   return !!project_file;
@@ -141,6 +169,21 @@ gbp_snap_build_system_get_priority (IdeBuildSystem *build_system)
 }
 
 static char *
+gbp_snap_build_system_get_builddir (IdeBuildSystem   *build_system,
+                                    IdeConfiguration *configuration)
+{
+  GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)build_system;
+
+  g_assert (GBP_IS_SNAP_BUILD_SYSTEM (self));
+  g_assert (IDE_IS_CONFIGURATION (configuration));
+
+  if (!self->project_directory || !g_file_is_native (self->project_directory))
+    return NULL;
+
+  return g_file_get_path (self->project_directory);
+}
+
+static char *
 gbp_snap_build_system_get_id (IdeBuildSystem *build_system)
 {
   return g_strdup ("snapcraft");
@@ -156,6 +199,7 @@ static void
 build_system_iface_init (IdeBuildSystemInterface *iface)
 {
   iface->get_priority = gbp_snap_build_system_get_priority;
+  iface->get_builddir = gbp_snap_build_system_get_builddir;
   iface->get_id = gbp_snap_build_system_get_id;
   iface->get_display_name = gbp_snap_build_system_get_display_name;
 }
@@ -165,6 +209,16 @@ G_DEFINE_TYPE_WITH_CODE (GbpSnapBuildSystem,
                          IDE_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (G_TYPE_ASYNC_INITABLE, async_initable_iface_init)
                          G_IMPLEMENT_INTERFACE (IDE_TYPE_BUILD_SYSTEM, build_system_iface_init))
+
+static void
+gbp_snap_build_system_finalize (GObject *object)
+{
+  GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)object;
+
+  g_clear_object (&self->project_file);
+
+  G_OBJECT_CLASS (gbp_snap_build_system_parent_class)->finalize (object);
+}
 
 static void
 gbp_snap_build_system_get_property (GObject    *object,
@@ -195,8 +249,7 @@ gbp_snap_build_system_set_property (GObject      *object,
   switch (prop_id)
     {
     case PROP_PROJECT_FILE:
-      g_clear_object (&self->project_file);
-      self->project_file = g_value_dup_object (value);
+      gbp_snap_build_system_set_project_file (self, g_value_get_object (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -208,6 +261,7 @@ gbp_snap_build_system_class_init (GbpSnapBuildSystemClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->finalize = gbp_snap_build_system_finalize;
   object_class->get_property = gbp_snap_build_system_get_property;
   object_class->set_property = gbp_snap_build_system_set_property;
 
