@@ -31,10 +31,11 @@ static IdeBuildStage *
 make_build_stage (IdeBuildPipeline  *pipeline,
                   IdeContext        *context,
                   const char        *step,
+                  gboolean           include_clean,
                   GError           **error)
 {
+  g_autoptr(IdeBuildStage) stage = NULL;
   g_autoptr(IdeSubprocessLauncher) launcher = NULL;
-  g_autoptr(IdeSubprocessLauncher) clean_launcher = NULL;
 
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
@@ -47,20 +48,28 @@ make_build_stage (IdeBuildPipeline  *pipeline,
   ide_subprocess_launcher_push_argv (launcher, "snapcraft");
   ide_subprocess_launcher_push_argv (launcher, step);
 
-  clean_launcher = ide_build_pipeline_create_launcher (pipeline, error);
-  if (!clean_launcher)
-    return NULL;
+  stage = g_object_new (IDE_TYPE_BUILD_STAGE_LAUNCHER,
+                        "context", context,
+                        "launcher", launcher,
+                        NULL);
 
-  ide_subprocess_launcher_push_argv (clean_launcher, "snapcraft");
-  ide_subprocess_launcher_push_argv (clean_launcher, "clean");
-  ide_subprocess_launcher_push_argv (clean_launcher, "--step");
-  ide_subprocess_launcher_push_argv (clean_launcher, step);
+  if (include_clean)
+    {
+      g_autoptr(IdeSubprocessLauncher) clean_launcher =
+        ide_build_pipeline_create_launcher (pipeline, error);
 
-  return g_object_new (IDE_TYPE_BUILD_STAGE_LAUNCHER,
-                       "context", context,
-                       "launcher", launcher,
-                       "clean-launcher", clean_launcher,
-                       NULL);
+      if (!clean_launcher)
+        return NULL;
+
+      ide_subprocess_launcher_push_argv (clean_launcher, "snapcraft");
+      ide_subprocess_launcher_push_argv (clean_launcher, "clean");
+      ide_subprocess_launcher_push_argv (clean_launcher, "--step");
+      ide_subprocess_launcher_push_argv (clean_launcher, step);
+
+      g_object_set (stage, "clean-launcher", clean_launcher, NULL);
+    }
+
+  return g_steal_pointer(&stage);
 }
 
 static gboolean
@@ -76,7 +85,7 @@ register_pull_stage (GbpSnapPipelineAddin  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "pull", error);
+  stage = make_build_stage (pipeline, context, "pull", TRUE, error);
   if (!stage)
     return FALSE;
 
@@ -101,7 +110,7 @@ register_build_stage (GbpSnapPipelineAddin  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "build", error);
+  stage = make_build_stage (pipeline, context, "build", TRUE, error);
   if (!stage)
     return FALSE;
 
@@ -126,7 +135,7 @@ register_stage_stage (GbpSnapPipelineAddin  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "stage", error);
+  stage = make_build_stage (pipeline, context, "stage", TRUE, error);
   if (!stage)
     return FALSE;
 
@@ -151,7 +160,7 @@ register_prime_stage (GbpSnapPipelineAddin  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "prime", error);
+  stage = make_build_stage (pipeline, context, "prime", TRUE, error);
   if (!stage)
     return FALSE;
 
@@ -176,7 +185,7 @@ register_snap_stage (GbpSnapPipelineAddin  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "snap", error);
+  stage = make_build_stage (pipeline, context, "snap", FALSE, error);
   if (!stage)
     return FALSE;
 
