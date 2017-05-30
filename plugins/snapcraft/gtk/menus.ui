@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<interface>
+  <menu id="gear-menu">
+    <section id="gear-menu-snap-section">
+      <submenu id="gear-menu-snap-section-submenu">
+        <attribute name="label" translatable="yes">Snapcraft</attribute>
+        <attribute name="visible">false</attribute>
+        <item>
+          <attribute name="label" translatable="yes">_Export snap package</attribute>
+          <attribute name="action">snap.export</attribute>
+        </item>
+      </submenu>
+    </section>
+  </menu>
+</interface>
