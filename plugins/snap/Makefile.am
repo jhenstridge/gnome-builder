@@ -17,6 +17,8 @@ libsnap_plugin_la_SOURCES =               \
 	gbp-snap-build-system.h           \
 	gbp-snap-pipeline-addin.c         \
 	gbp-snap-pipeline-addin.h         \
+	gbp-snap-workbench-addin.c        \
+	gbp-snap-workbench-addin.h        \
 	$(NULL)
 
 nodist_libsnap_plugin_la_SOURCES =        \
