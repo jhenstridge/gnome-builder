@@ -15,6 +15,8 @@ libsnap_plugin_la_SOURCES =               \
 	gbp-snap-utils.h                  \
 	gbp-snap-build-system.c           \
 	gbp-snap-build-system.h           \
+	gbp-snap-build-stage.c            \
+	gbp-snap-build-stage.h            \
 	gbp-snap-pipeline-addin.c         \
 	gbp-snap-pipeline-addin.h         \
 	gbp-snap-workbench-addin.c        \
