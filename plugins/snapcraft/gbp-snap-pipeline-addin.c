@@ -20,6 +20,7 @@
 
 #include "gbp-snap-pipeline-addin.h"
 #include "gbp-snap-build-system.h"
+#include "gbp-snap-build-stage.h"
 
 enum {
   EXPORT_STAGE,
@@ -27,72 +28,27 @@ enum {
   EXPORT_SNAP,
 };
 
-static IdeBuildStage *
-make_build_stage (IdeBuildPipeline  *pipeline,
-                  IdeContext        *context,
-                  const char        *step,
-                  gboolean           include_clean,
-                  GError           **error)
-{
-  g_autoptr(IdeBuildStage) stage = NULL;
-  g_autoptr(IdeSubprocessLauncher) launcher = NULL;
-
-  g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
-  g_assert (IDE_IS_CONTEXT (context));
-  g_assert (step != NULL);
-
-  launcher = ide_build_pipeline_create_launcher (pipeline, error);
-  if (!launcher)
-    return NULL;
-
-  ide_subprocess_launcher_push_argv (launcher, "snapcraft");
-  ide_subprocess_launcher_push_argv (launcher, step);
-
-  stage = g_object_new (IDE_TYPE_BUILD_STAGE_LAUNCHER,
-                        "context", context,
-                        "launcher", launcher,
-                        NULL);
-
-  if (include_clean)
-    {
-      g_autoptr(IdeSubprocessLauncher) clean_launcher =
-        ide_build_pipeline_create_launcher (pipeline, error);
-
-      if (!clean_launcher)
-        return NULL;
-
-      ide_subprocess_launcher_push_argv (clean_launcher, "snapcraft");
-      ide_subprocess_launcher_push_argv (clean_launcher, "clean");
-      ide_subprocess_launcher_push_argv (clean_launcher, "--step");
-      ide_subprocess_launcher_push_argv (clean_launcher, step);
-
-      g_object_set (stage, "clean-launcher", clean_launcher, NULL);
-    }
-
-  return g_steal_pointer(&stage);
-}
-
 static gboolean
 register_pull_stage (GbpSnapPipelineAddin  *self,
                      IdeBuildPipeline      *pipeline,
                      IdeContext            *context,
                      GError               **error)
 {
-  g_autoptr(IdeBuildStage) stage = NULL;
+  g_autoptr(GbpSnapBuildStage) stage = NULL;
   guint stage_id;
 
   g_assert (GBP_IS_SNAP_PIPELINE_ADDIN (self));
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "pull", TRUE, error);
+  stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_PULL, error);
   if (!stage)
     return FALSE;
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_DOWNLOADS,
                                          0,
-                                         stage);
+                                         IDE_BUILD_STAGE (stage));
   ide_build_pipeline_addin_track (IDE_BUILD_PIPELINE_ADDIN (self), stage_id);
   return TRUE;
 }
@@ -103,21 +59,21 @@ register_build_stage (GbpSnapPipelineAddin  *self,
                       IdeContext            *context,
                       GError               **error)
 {
-  g_autoptr(IdeBuildStage) stage = NULL;
+  g_autoptr(GbpSnapBuildStage) stage = NULL;
   guint stage_id;
 
   g_assert (GBP_IS_SNAP_PIPELINE_ADDIN (self));
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "build", TRUE, error);
+  stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_BUILD, error);
   if (!stage)
     return FALSE;
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_BUILD,
                                          0,
-                                         stage);
+                                         IDE_BUILD_STAGE (stage));
   ide_build_pipeline_addin_track (IDE_BUILD_PIPELINE_ADDIN (self), stage_id);
   return TRUE;
 }
@@ -128,21 +84,21 @@ register_stage_stage (GbpSnapPipelineAddin  *self,
                       IdeContext            *context,
                       GError               **error)
 {
-  g_autoptr(IdeBuildStage) stage = NULL;
+  g_autoptr(GbpSnapBuildStage) stage = NULL;
   guint stage_id;
 
   g_assert (GBP_IS_SNAP_PIPELINE_ADDIN (self));
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "stage", TRUE, error);
+  stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_STAGE, error);
   if (!stage)
     return FALSE;
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_EXPORT,
                                          EXPORT_STAGE,
-                                         stage);
+                                         IDE_BUILD_STAGE (stage));
   ide_build_pipeline_addin_track (IDE_BUILD_PIPELINE_ADDIN (self), stage_id);
   return TRUE;
 }
@@ -153,21 +109,21 @@ register_prime_stage (GbpSnapPipelineAddin  *self,
                       IdeContext            *context,
                       GError               **error)
 {
-  g_autoptr(IdeBuildStage) stage = NULL;
+  g_autoptr(GbpSnapBuildStage) stage = NULL;
   guint stage_id;
 
   g_assert (GBP_IS_SNAP_PIPELINE_ADDIN (self));
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "prime", TRUE, error);
+  stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_PRIME, error);
   if (!stage)
     return FALSE;
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_EXPORT,
                                          EXPORT_PRIME,
-                                         stage);
+                                         IDE_BUILD_STAGE (stage));
   ide_build_pipeline_addin_track (IDE_BUILD_PIPELINE_ADDIN (self), stage_id);
   return TRUE;
 }
@@ -178,28 +134,28 @@ register_snap_stage (GbpSnapPipelineAddin  *self,
                      IdeContext            *context,
                      GError               **error)
 {
-  g_autoptr(IdeBuildStage) stage = NULL;
+  g_autoptr(GbpSnapBuildStage) stage = NULL;
   guint stage_id;
 
   g_assert (GBP_IS_SNAP_PIPELINE_ADDIN (self));
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
   g_assert (IDE_IS_CONTEXT (context));
 
-  stage = make_build_stage (pipeline, context, "snap", FALSE, error);
+  stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_SNAP, error);
   if (!stage)
     return FALSE;
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_EXPORT,
                                          EXPORT_SNAP,
-                                         stage);
+                                         IDE_BUILD_STAGE (stage));
   ide_build_pipeline_addin_track (IDE_BUILD_PIPELINE_ADDIN (self), stage_id);
   return TRUE;
 }
 
 static void
 gbp_snap_pipeline_addin_load (IdeBuildPipelineAddin *addin,
-                                 IdeBuildPipeline      *pipeline)
+                              IdeBuildPipeline      *pipeline)
 {
   GbpSnapPipelineAddin *self = (GbpSnapPipelineAddin *)addin;
   g_autoptr(GError) error = NULL;

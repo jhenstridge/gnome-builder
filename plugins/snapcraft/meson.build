@@ -11,6 +11,8 @@ snapcraft_sources = [
   'gbp-snap-plugin.c',
   'gbp-snap-utils.c',
   'gbp-snap-utils.h',
+  'gbp-snap-build-stage.c',
+  'gbp-snap-build-stage.h',
   'gbp-snap-build-system.c',
   'gbp-snap-build-system.h',
   'gbp-snap-pipeline-addin.c',
