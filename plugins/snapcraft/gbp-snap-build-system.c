@@ -23,9 +23,12 @@
 
 struct _GbpSnapBuildSystem
 {
-  IdeObject parent;
-  GFile *project_file;
-  GFile *project_directory;
+  IdeObject     parent;
+  GFile        *project_file;
+  GFile        *project_directory;
+
+  GFileMonitor *project_file_monitor;
+  char         *snap_name;
 };
 
 enum {
@@ -33,6 +36,103 @@ enum {
   PROP_PROJECT_FILE,
   LAST_PROP
 };
+
+const char *
+gbp_snap_build_system_get_snap_name (GbpSnapBuildSystem *self)
+{
+  return self->snap_name;
+}
+
+static void
+gbp_snap_build_system_snapcraft_changed (GbpSnapBuildSystem *self,
+                                         GFile *file,
+                                         GFile *other_file,
+                                         GFileMonitorEvent event_type,
+                                         gpointer user_data)
+{
+  gboolean snapcraft_changed = FALSE;
+  g_return_if_fail (GBP_IS_SNAP_BUILD_SYSTEM (self));
+  g_return_if_fail (G_IS_FILE (file));
+
+  switch (event_type)
+    {
+    case G_FILE_MONITOR_EVENT_CHANGED:
+    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
+    case G_FILE_MONITOR_EVENT_CREATED:
+    case G_FILE_MONITOR_EVENT_MOVED_IN:
+      if (g_file_equal (file, self->project_file))
+        snapcraft_changed = TRUE;
+      break;
+    case G_FILE_MONITOR_EVENT_RENAMED:
+      // Has some other file been renamed over snapcraft.yaml?
+      if (g_file_equal (other_file, self->project_file))
+        snapcraft_changed = TRUE;
+      break;
+
+    case G_FILE_MONITOR_EVENT_DELETED:
+    case G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED:
+    case G_FILE_MONITOR_EVENT_PRE_UNMOUNT:
+    case G_FILE_MONITOR_EVENT_UNMOUNTED:
+    case G_FILE_MONITOR_EVENT_MOVED:
+    case G_FILE_MONITOR_EVENT_MOVED_OUT:
+    default:
+      break;
+    }
+
+  if (snapcraft_changed)
+    {
+      g_clear_pointer (&self->snap_name, g_free);
+      self->snap_name = gbp_snap_calculate_package_name (self->project_file, NULL);
+      g_message ("snap name: %s", self->snap_name);
+    }
+}
+
+static void
+gbp_snap_build_system_set_project_file (GbpSnapBuildSystem *self,
+                                        GFile *project_file,
+                                        GCancellable *cancellable)
+{
+  g_autoptr(GFile) parent = NULL;
+  g_autofree char *basename = NULL;
+  g_autofree char *parent_basename = NULL;
+  g_autoptr(GError) error = NULL;
+
+  g_clear_object (&self->project_file);
+  g_clear_object (&self->project_directory);
+  g_clear_object (&self->project_file_monitor);
+  g_clear_pointer (&self->snap_name, g_free);
+
+  self->project_file = g_object_ref (project_file);
+
+  /* Determine the project directory: if the file ends in
+   * "snap/snapcraft.yaml", then the project is rooted in the
+   * parent. */
+  basename = g_file_get_basename (project_file);
+  parent = g_file_get_parent (project_file);
+  parent_basename = g_file_get_basename (parent);
+  if (!g_strcmp0(basename, "snapcraft.yaml") &&
+      !g_strcmp0(parent_basename, "snap"))
+    self->project_directory = g_file_get_parent (parent);
+  else
+    self->project_directory = g_object_ref (parent);
+
+  self->project_file_monitor = g_file_monitor_file (self->project_file,
+                                                    G_FILE_MONITOR_WATCH_MOVES,
+                                                    cancellable,
+                                                    &error);
+  if (self->project_file_monitor)
+    {
+      g_signal_connect_object (self->project_file_monitor, "changed",
+                               G_CALLBACK (gbp_snap_build_system_snapcraft_changed),
+                               self, G_CONNECT_SWAPPED);
+    }
+  else
+    {
+      g_warning ("Could not create file monitor: %s", error->message);
+    }
+  self->snap_name = gbp_snap_calculate_package_name (project_file, cancellable);
+  g_message ("snap name: %s", self->snap_name);
+}
 
 static void
 gbp_snap_build_system_discover_worker (GTask        *task,
@@ -69,46 +169,21 @@ gbp_snap_build_system_discover_worker (GTask        *task,
 
       snapcraft_yaml = gbp_snap_find_snapcraft_yaml (directory, cancellable);
     }
+  g_clear_pointer (&basename, g_free);
 
-  if (snapcraft_yaml)
-    {
-      g_task_return_pointer (task, g_steal_pointer (&snapcraft_yaml),
-                             g_object_unref);
-    }
-  else
+  if (!snapcraft_yaml)
     {
       g_task_return_new_error (task,
                                G_IO_ERROR,
                                G_IO_ERROR_NOT_FOUND,
                                "Failed to locate snapcraft.yaml");
+      IDE_EXIT;
     }
+
+  gbp_snap_build_system_set_project_file (self, snapcraft_yaml, cancellable);
+
+  g_task_return_boolean (task, TRUE);
   IDE_EXIT;
-}
-
-static void
-gbp_snap_build_system_set_project_file (GbpSnapBuildSystem *self,
-                                        GFile *project_file)
-{
-  g_autoptr(GFile) parent = NULL;
-  g_autofree char *basename = NULL;
-  g_autofree char *parent_basename = NULL;
-
-  g_clear_object (&self->project_file);
-  g_clear_object (&self->project_directory);
-
-  self->project_file = g_object_ref (project_file);
-
-  /* Determine the project directory: if the file ends in
-   * "snap/snapcraft.yaml", then the project is rooted in the
-   * parent. */
-  basename = g_file_get_basename (project_file);
-  parent = g_file_get_parent (project_file);
-  parent_basename = g_file_get_basename (parent);
-  if (!g_strcmp0(basename, "snapcraft.yaml") &&
-      !g_strcmp0(parent_basename, "snap"))
-    self->project_directory = g_file_get_parent (parent);
-  else
-    self->project_directory = g_object_ref (parent);
 }
 
 static void
@@ -138,20 +213,12 @@ gbp_snap_build_system_init_finish (GAsyncInitable  *initable,
                                    GAsyncResult    *result,
                                    GError         **error)
 {
-  GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)initable;
   GTask *task = (GTask *)result;
-  g_autoptr(GFile) project_file = NULL;
 
   g_return_val_if_fail (GBP_IS_SNAP_BUILD_SYSTEM (initable), FALSE);
   g_return_val_if_fail (G_IS_TASK (task), FALSE);
 
-  project_file = g_task_propagate_pointer (task, error);
-  if (project_file)
-    {
-      gbp_snap_build_system_set_project_file (self, project_file);
-    }
-
-  return !!project_file;
+  return g_task_propagate_boolean (task, error);
 }
 
 
@@ -216,6 +283,9 @@ gbp_snap_build_system_finalize (GObject *object)
   GbpSnapBuildSystem *self = (GbpSnapBuildSystem *)object;
 
   g_clear_object (&self->project_file);
+  g_clear_object (&self->project_directory);
+  g_clear_object (&self->project_file_monitor);
+  g_clear_pointer (&self->snap_name, g_free);
 
   G_OBJECT_CLASS (gbp_snap_build_system_parent_class)->finalize (object);
 }
@@ -249,7 +319,7 @@ gbp_snap_build_system_set_property (GObject      *object,
   switch (prop_id)
     {
     case PROP_PROJECT_FILE:
-      gbp_snap_build_system_set_project_file (self, g_value_get_object (value));
+      gbp_snap_build_system_set_project_file (self, g_value_get_object (value), NULL);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
