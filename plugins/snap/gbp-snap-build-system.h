@@ -27,6 +27,8 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GbpSnapBuildSystem, gbp_snap_build_system, GBP, SNAP_BUILD_SYSTEM, IdeObject)
 
+const char *gbp_snap_build_system_get_snap_name (GbpSnapBuildSystem *self);
+
 G_END_DECLS
 
 #endif /* GBP_SNAP_BUILD_SYSTEM_H */

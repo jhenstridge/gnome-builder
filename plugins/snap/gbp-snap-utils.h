@@ -21,18 +21,14 @@
 
 #include <glib.h>
 #include <gio/gio.h>
-#include <yaml.h>
 
 G_BEGIN_DECLS
 
 GFile *gbp_snap_find_snapcraft_yaml (GFile        *directory,
                                      GCancellable *cancellable);
 
-yaml_node_t *gbp_snap_yaml_mapping_lookup (yaml_document_t *document,
-                                           yaml_node_t     *node,
-                                           const char      *key_string);
-
-yaml_node_t *gbp_snap_find_main_part (yaml_document_t *document);
+char *gbp_snap_calculate_package_name (GFile        *snapcraft_yaml,
+                                       GCancellable *cancellable);
 
 G_END_DECLS
 
