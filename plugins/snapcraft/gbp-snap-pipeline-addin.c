@@ -128,6 +128,39 @@ register_prime_stage (GbpSnapPipelineAddin  *self,
   return TRUE;
 }
 
+static void
+snap_notify_completed (IdeBuildStage    *stage,
+                       GParamSpec       *pspec,
+                       IdeBuildPipeline *pipeline)
+{
+  IdeContext *context;
+  IdeBuildSystem *build_system;
+  IdeConfiguration *configuration;
+  g_autofree char *builddir = NULL;
+  g_autofree char *snap_path = NULL;
+  g_autoptr(GFile) snap_file = NULL;
+  
+
+  g_assert (IDE_IS_BUILD_STAGE (stage));
+  g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
+
+  if (!ide_build_stage_get_completed (stage))
+    return;
+
+  context = ide_object_get_context (IDE_OBJECT (stage));
+  build_system = ide_context_get_build_system (context);
+  configuration = ide_build_pipeline_get_configuration (pipeline);
+
+  g_assert (GBP_IS_SNAP_BUILD_SYSTEM (build_system));
+
+  builddir = ide_build_system_get_builddir (build_system, configuration);
+  snap_path = g_build_filename (builddir,
+                                gbp_snap_build_system_get_snap_name (GBP_SNAP_BUILD_SYSTEM (build_system)),
+                                NULL);
+  snap_file = g_file_new_for_path (snap_path);
+  ide_file_manager_show (snap_file, NULL);
+}
+
 static gboolean
 register_snap_stage (GbpSnapPipelineAddin  *self,
                      IdeBuildPipeline      *pipeline,
@@ -144,6 +177,9 @@ register_snap_stage (GbpSnapPipelineAddin  *self,
   stage = gbp_snap_build_stage_new (context, pipeline, GBP_SNAP_BUILD_STEP_SNAP, error);
   if (!stage)
     return FALSE;
+
+  g_signal_connect_object (stage, "notify::completed",
+                           G_CALLBACK (snap_notify_completed), pipeline, 0);
 
   stage_id = ide_build_pipeline_connect (pipeline,
                                          IDE_BUILD_PHASE_EXPORT,

@@ -83,7 +83,6 @@ gbp_snap_build_system_snapcraft_changed (GbpSnapBuildSystem *self,
     {
       g_clear_pointer (&self->snap_name, g_free);
       self->snap_name = gbp_snap_calculate_package_name (self->project_file, NULL);
-      g_message ("snap name: %s", self->snap_name);
     }
 }
 
@@ -131,7 +130,6 @@ gbp_snap_build_system_set_project_file (GbpSnapBuildSystem *self,
       g_warning ("Could not create file monitor: %s", error->message);
     }
   self->snap_name = gbp_snap_calculate_package_name (project_file, cancellable);
-  g_message ("snap name: %s", self->snap_name);
 }
 
 static void
